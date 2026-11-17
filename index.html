@@ -1,0 +1,2317 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Self-Hosting Guide: Deploy Your Frontend &amp; Backend Without Vercel</title>
+<style>
+:root{
+  --bg:#ffffff; --bg-soft:#f6f7f9; --bg-code:#0f1419; --fg:#1b1f24; --fg-soft:#57606a; --border:#e3e6ea;
+  --accent:#4f46e5; --accent-soft:#eef0ff; --green:#16a34a; --green-soft:#ecfdf3; --amber:#b45309; --amber-soft:#fff7e6;
+  --red:#dc2626; --red-soft:#fef2f2; --blue:#0369a1; --blue-soft:#eff8ff; --code-fg:#e6e6e6; --inline-code:#eef0f3;
+  --radius:10px; --sidebar:280px;
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
+}
+[data-theme="dark"]{
+  --bg:#0d1117; --bg-soft:#161b22; --bg-code:#010409; --fg:#e6edf3; --fg-soft:#8b949e; --border:#30363d;
+  --accent:#818cf8; --accent-soft:#1e1b4b; --green:#4ade80; --green-soft:#0f2a1a; --amber:#fbbf24; --amber-soft:#2a1f05;
+  --red:#f87171; --red-soft:#2a0f0f; --blue:#7dd3fc; --blue-soft:#0b2233; --inline-code:#21262d;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:20px}
+body{margin:0;font-family:var(--sans);background:var(--bg);color:var(--fg);line-height:1.65;font-size:16px}
+a{color:var(--accent)}
+/* ---------- sidebar ---------- */
+.sidebar{position:fixed;top:0;left:0;bottom:0;width:var(--sidebar);background:var(--bg-soft);border-right:1px solid var(--border);overflow-y:auto;padding:22px 18px 40px;z-index:20;transition:transform .2s}
+.brand{font-weight:800;font-size:18px;margin:0 0 4px;display:flex;align-items:center;gap:8px}
+.brand-sub{color:var(--fg-soft);font-size:13px;margin-bottom:16px}
+.progress{margin:0 0 18px}
+.progress-bar{height:8px;background:var(--border);border-radius:99px;overflow:hidden}
+.progress-fill{height:100%;width:0;background:var(--green);transition:width .3s}
+.progress-label{font-size:12px;color:var(--fg-soft);margin-top:6px;display:flex;justify-content:space-between}
+.progress-label button{background:none;border:none;color:var(--fg-soft);cursor:pointer;font-size:12px;text-decoration:underline;padding:0}
+.nav-group{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-soft);font-weight:700;margin:18px 0 6px}
+.sidebar nav a{display:flex;align-items:center;gap:8px;padding:5px 10px;border-radius:7px;color:var(--fg);text-decoration:none;font-size:14px}
+.sidebar nav a:hover{background:var(--border)}
+.sidebar nav a.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.sidebar nav a .tick{margin-left:auto;color:var(--green);font-size:12px;visibility:hidden}
+.sidebar nav a.done .tick{visibility:visible}
+.theme-btn{margin-top:20px;width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--fg);cursor:pointer;font-size:13px}
+/* ---------- main ---------- */
+main{margin-left:var(--sidebar);padding:40px 48px 120px}
+.content{max-width:860px;margin:0 auto}
+.menu-btn{display:none;position:fixed;top:12px;left:12px;z-index:30;border:1px solid var(--border);background:var(--bg);color:var(--fg);border-radius:8px;padding:8px 12px;font-size:15px;cursor:pointer}
+h1{font-size:40px;line-height:1.15;margin:0 0 12px;letter-spacing:-.02em}
+h2{font-size:28px;margin:64px 0 10px;padding-top:12px;border-top:1px solid var(--border);letter-spacing:-.01em}
+h3{font-size:20px;margin:32px 0 8px}
+h4{font-size:16px;margin:22px 0 6px}
+.lead{font-size:19px;color:var(--fg-soft);margin:0 0 24px}
+.part-label{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);background:var(--accent-soft);padding:3px 10px;border-radius:99px;margin-top:64px}
+.part-label + h2{margin-top:10px;border-top:none}
+p code, li code, td code, h3 code, h4 code{font-family:var(--mono);font-size:.88em;background:var(--inline-code);padding:2px 6px;border-radius:5px}
+ul,ol{padding-left:24px}
+li{margin:4px 0}
+hr{border:none;border-top:1px solid var(--border);margin:40px 0}
+kbd{font-family:var(--mono);font-size:.85em;border:1px solid var(--border);border-bottom-width:2px;border-radius:5px;padding:1px 6px;background:var(--bg-soft)}
+/* ---------- step header ---------- */
+.step-head{display:flex;align-items:center;gap:14px;margin:64px 0 8px;padding-top:12px;border-top:1px solid var(--border)}
+.step-head h2{margin:0;padding:0;border:none;flex:1}
+.step-num{flex:none;width:40px;height:40px;border-radius:50%;background:var(--accent);color:#fff;font-weight:800;display:grid;place-items:center;font-size:17px}
+.done-toggle{flex:none;display:flex;align-items:center;gap:6px;font-size:13px;color:var(--fg-soft);cursor:pointer;user-select:none;border:1px solid var(--border);padding:6px 10px;border-radius:8px}
+.done-toggle input{accent-color:var(--green);width:16px;height:16px;cursor:pointer}
+.done-toggle:has(input:checked){color:var(--green);border-color:var(--green);background:var(--green-soft)}
+.goal{color:var(--fg-soft);font-style:italic;margin:4px 0 16px}
+/* ---------- code ---------- */
+.code{margin:14px 0 20px;border-radius:var(--radius);overflow:hidden;border:1px solid var(--border);background:var(--bg-code)}
+.code-head{display:flex;justify-content:space-between;align-items:center;padding:6px 12px;background:rgba(255,255,255,.04);border-bottom:1px solid rgba(255,255,255,.08);font-family:var(--mono);font-size:12px;color:#9aa4af}
+.copy-btn{background:transparent;border:1px solid rgba(255,255,255,.15);color:#c9d1d9;border-radius:6px;padding:2px 10px;cursor:pointer;font-size:12px;font-family:var(--sans)}
+.copy-btn:hover{background:rgba(255,255,255,.08)}
+.copy-btn.ok{color:#4ade80;border-color:#4ade80}
+pre{margin:0;padding:14px 16px;overflow-x:auto;color:var(--code-fg);font-family:var(--mono);font-size:13.5px;line-height:1.6}
+pre .c{color:#7d8590;font-style:italic}
+pre .k{color:#ff7b72}
+pre .s{color:#a5d6ff}
+pre .h{color:#d2a8ff}
+/* ---------- callouts ---------- */
+.callout{border-left:4px solid;border-radius:0 var(--radius) var(--radius) 0;padding:12px 16px;margin:18px 0}
+.callout p{margin:4px 0}
+.callout-title{font-weight:700;font-size:14px;margin-bottom:2px;display:flex;gap:6px;align-items:center}
+.tip{border-color:var(--green);background:var(--green-soft)}
+.tip .callout-title{color:var(--green)}
+.warn{border-color:var(--amber);background:var(--amber-soft)}
+.warn .callout-title{color:var(--amber)}
+.danger{border-color:var(--red);background:var(--red-soft)}
+.danger .callout-title{color:var(--red)}
+.info{border-color:var(--blue);background:var(--blue-soft)}
+.info .callout-title{color:var(--blue)}
+.verify{border-color:#10b981;background:var(--green-soft)}
+.verify .callout-title{color:var(--green)}
+.why{border-color:#8b5cf6;background:var(--accent-soft)}
+.why .callout-title{color:var(--accent)}
+.tree{font-family:var(--mono);font-size:13.5px;background:var(--bg-soft);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;white-space:pre;overflow-x:auto;line-height:1.5}
+.flow{counter-reset:flow;list-style:none;padding-left:0}
+.flow li{counter-increment:flow;position:relative;padding:8px 0 8px 44px;border-left:2px solid var(--border);margin-left:14px}
+.flow li::before{content:counter(flow);position:absolute;left:-15px;top:6px;width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;font-weight:700;font-size:13px;display:grid;place-items:center}
+/* ---------- tables ---------- */
+table{width:100%;border-collapse:collapse;margin:16px 0 22px;font-size:14.5px}
+th,td{border:1px solid var(--border);padding:9px 12px;text-align:left;vertical-align:top}
+th{background:var(--bg-soft);font-weight:700}
+/* ---------- tabs ---------- */
+.tabs{margin:16px 0 22px}
+.tab-list{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:-1px;flex-wrap:wrap}
+.tab-btn{border:1px solid transparent;border-bottom:none;background:none;color:var(--fg-soft);padding:8px 16px;cursor:pointer;font-size:14px;font-weight:600;border-radius:8px 8px 0 0}
+.tab-btn.active{border-color:var(--border);background:var(--bg);color:var(--accent)}
+.tab-panel{display:none;border:1px solid var(--border);border-radius:0 var(--radius) var(--radius) var(--radius);padding:4px 16px 8px}
+.tab-panel.active{display:block}
+/* ---------- diagram ---------- */
+.diagram{border:1px solid var(--border);border-radius:var(--radius);padding:22px;background:var(--bg-soft);margin:20px 0}
+.d-row{display:flex;justify-content:center;align-items:stretch;gap:12px;flex-wrap:wrap}
+.d-box{background:var(--bg);border:1.5px solid var(--border);border-radius:9px;padding:10px 14px;text-align:center;font-size:13px;min-width:150px;color:var(--fg-soft)}
+.d-box b{display:block;color:var(--fg);font-size:14px;margin-bottom:2px}
+.d-arrow{text-align:center;color:var(--fg-soft);font-size:13px;margin:6px 0}
+.d-server{border:2px dashed var(--accent);border-radius:12px;padding:16px;margin-top:6px}
+.d-server-title{text-align:center;color:var(--accent);font-weight:700;font-size:13px;margin-bottom:12px}
+.b1{border-color:#8b5cf6}.b2{border-color:#0ea5e9}.b3{border-color:#f59e0b}.b4{border-color:#10b981}
+/* ---------- cards ---------- */
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin:18px 0}
+.card{border:1px solid var(--border);border-radius:var(--radius);padding:16px;background:var(--bg-soft)}
+.card h4{margin:0 0 6px}
+.card p{margin:0;font-size:14px;color:var(--fg-soft)}
+.card a{text-decoration:none}
+.badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;background:var(--accent-soft);color:var(--accent);margin-bottom:8px}
+details{border:1px solid var(--border);border-radius:var(--radius);padding:10px 16px;margin:12px 0;background:var(--bg-soft)}
+details summary{cursor:pointer;font-weight:600}
+details[open] summary{margin-bottom:8px}
+.checklist{list-style:none;padding-left:0}
+.checklist li{display:flex;gap:10px;align-items:flex-start;padding:6px 0;border-bottom:1px dashed var(--border)}
+.checklist input{margin-top:5px;accent-color:var(--green);width:16px;height:16px}
+footer{margin-top:80px;color:var(--fg-soft);font-size:13px;border-top:1px solid var(--border);padding-top:20px}
+/* ---------- responsive ---------- */
+@media (max-width:900px){
+  .sidebar{transform:translateX(-100%);box-shadow:0 0 40px rgba(0,0,0,.25)}
+  .sidebar.open{transform:none}
+  main{margin-left:0;padding:64px 18px 100px}
+  .menu-btn{display:block}
+  h1{font-size:30px}
+  .step-head{flex-wrap:wrap}
+}
+@media print{.sidebar,.menu-btn,.copy-btn,.done-toggle{display:none!important} main{margin:0;padding:0}}
+</style>
+</head>
+<body>
+
+<button class="menu-btn" id="menuBtn" aria-label="Open navigation">☰ Menu</button>
+
+<aside class="sidebar" id="sidebar">
+  <div class="brand">🚀 Self-Hosting Guide</div>
+  <div class="brand-sub">Host your frontend + backend yourself</div>
+
+  <div class="progress">
+    <div class="progress-bar"><div class="progress-fill" id="progFill"></div></div>
+    <div class="progress-label"><span id="progText">0 / 12 steps done</span><button id="resetProg">reset</button></div>
+  </div>
+
+  <nav id="nav">
+    <div class="nav-group">Start here</div>
+    <a href="#intro">Introduction</a>
+    <a href="#how-it-works">How it all fits together</a>
+    <a href="#prereqs">What you need</a>
+    <a href="#concepts">Core concepts</a>
+    <a href="#linux">Linux crash course</a>
+    <a href="#sample-app">Sample app to deploy</a>
+
+    <div class="nav-group">Part 1 · Your own server</div>
+    <a href="#step-1" data-step="1">1. Get a server <span class="tick">✓</span></a>
+    <a href="#step-2" data-step="2">2. Connect &amp; secure it <span class="tick">✓</span></a>
+    <a href="#step-3" data-step="3">3. Point your domain <span class="tick">✓</span></a>
+    <a href="#step-4" data-step="4">4. Install runtime &amp; code <span class="tick">✓</span></a>
+    <a href="#step-5" data-step="5">5. Run the backend <span class="tick">✓</span></a>
+    <a href="#step-6" data-step="6">6. Build the frontend <span class="tick">✓</span></a>
+    <a href="#step-7" data-step="7">7. Reverse proxy &amp; HTTPS <span class="tick">✓</span></a>
+    <a href="#step-8" data-step="8">8. Database &amp; backups <span class="tick">✓</span></a>
+    <a href="#step-9" data-step="9">9. Deploy updates <span class="tick">✓</span></a>
+    <a href="#step-10" data-step="10">10. Level up with Docker <span class="tick">✓</span></a>
+    <a href="#step-11" data-step="11">11. Monitoring &amp; upkeep <span class="tick">✓</span></a>
+    <a href="#step-12" data-step="12">12. More apps &amp; staging <span class="tick">✓</span></a>
+
+    <div class="nav-group">Part 2 · AWS</div>
+    <a href="#aws">The AWS map</a>
+    <a href="#aws-account">Account &amp; CLI setup</a>
+    <a href="#aws-s3">Frontend on S3 + CloudFront</a>
+    <a href="#aws-gha">Auto-deploy to S3 (OIDC)</a>
+    <a href="#aws-rds">Database on RDS</a>
+    <a href="#aws-backend">Backend options on AWS</a>
+    <a href="#aws-ecs">Containers on ECS Fargate</a>
+
+    <div class="nav-group">Part 3 · Cloudflare</div>
+    <a href="#cf">Cloudflare overview</a>
+    <a href="#cf-pages">Frontend on Pages</a>
+    <a href="#cf-split">Pages + VPS API (CORS)</a>
+    <a href="#cf-workers">Backend on Workers</a>
+    <a href="#cf-d1">Database with D1</a>
+    <a href="#cf-proxy">Proxying your VPS</a>
+    <a href="#cf-tunnel">Cloudflare Tunnel</a>
+
+    <div class="nav-group">Reference</div>
+    <a href="#costs">What it costs</a>
+    <a href="#golive">Go-live checklist</a>
+    <a href="#troubleshooting">Troubleshooting</a>
+    <a href="#security">Security checklist</a>
+    <a href="#faq">FAQ</a>
+    <a href="#roadmap">Learning roadmap</a>
+    <a href="#glossary">Glossary</a>
+  </nav>
+
+  <button class="theme-btn" id="themeBtn">🌓 Toggle dark mode</button>
+</aside>
+
+<main>
+<div class="content">
+
+<!-- ================= INTRO ================= -->
+<section id="intro">
+  <h1>Host your app yourself, without Vercel</h1>
+  <p class="lead">A step-by-step guide to putting a frontend and a backend on the internet yourself: on a plain Linux server, on AWS, or on Cloudflare.</p>
+
+  <p>Platforms like Vercel, Netlify and Render take care of a lot of jobs for you without showing you. When you host it yourself, <strong>each of those jobs becomes something you do</strong>:</p>
+
+  <table>
+    <tr><th>What Vercel does for you</th><th>What you'll use instead</th><th>Step</th></tr>
+    <tr><td>Gives you a machine to run on</td><td>A VPS (virtual private server)</td><td><a href="#step-1">1</a></td></tr>
+    <tr><td>Keeps the machine secure</td><td>SSH keys, a firewall, updates</td><td><a href="#step-2">2</a></td></tr>
+    <tr><td>Connects your domain</td><td>DNS <code>A</code> records</td><td><a href="#step-3">3</a></td></tr>
+    <tr><td>Builds your code</td><td><code>npm run build</code> on the server</td><td><a href="#step-4">4</a>, <a href="#step-6">6</a></td></tr>
+    <tr><td>Keeps your API running</td><td>systemd (or PM2 / Docker)</td><td><a href="#step-5">5</a></td></tr>
+    <tr><td>Serves files &amp; handles HTTPS</td><td>Caddy or Nginx</td><td><a href="#step-7">7</a></td></tr>
+    <tr><td>Database &amp; backups</td><td>PostgreSQL + a cron job</td><td><a href="#step-8">8</a></td></tr>
+    <tr><td>"Push to deploy" &amp; instant rollback</td><td>A deploy script + GitHub Actions + release folders</td><td><a href="#step-9">9</a></td></tr>
+    <tr><td>Reproducible builds</td><td>Docker &amp; Docker Compose</td><td><a href="#step-10">10</a></td></tr>
+    <tr><td>Status alerts &amp; logs dashboard</td><td>Uptime monitor, Sentry, journalctl</td><td><a href="#step-11">11</a></td></tr>
+    <tr><td>Preview deployments</td><td>A password-protected staging site</td><td><a href="#step-12">12</a></td></tr>
+  </table>
+
+  <div class="callout info">
+    <div class="callout-title">ℹ️ How to use this guide</div>
+    <p><strong>Do Part 1 first, even if you plan to use AWS or Cloudflare later.</strong> It shows you what's actually going on, and the cloud services are mostly managed versions of the same pieces. Tick <em>"Mark done"</em> as you finish each step. Your progress is saved in your browser.</p>
+  </div>
+</section>
+
+<section id="how-it-works">
+  <h2>How it all fits together</h2>
+  <p>This is what you'll build in Part 1. Everything runs on one server, and one program (the <em>reverse proxy</em>) sits at the front and sends each request to the right place.</p>
+
+  <div class="diagram">
+    <div class="d-row"><div class="d-box"><b>🌍 User's browser</b>visits https://myapp.com</div></div>
+    <div class="d-arrow">↓</div>
+    <div class="d-row"><div class="d-box"><b>📖 DNS</b>myapp.com → 203.0.113.10 (your server's IP)</div></div>
+    <div class="d-arrow">↓ only ports 80 &amp; 443 are open (firewall)</div>
+    <div class="d-server">
+      <div class="d-server-title">🖥️ Your server (Ubuntu VPS)</div>
+      <div class="d-row"><div class="d-box b1"><b>Caddy / Nginx</b>reverse proxy · auto HTTPS</div></div>
+      <div class="d-arrow">↙ requests to <code>/</code> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; requests to <code>/api/*</code> ↘</div>
+      <div class="d-row">
+        <div class="d-box b2"><b>Frontend</b>static files in /var/www/myapp</div>
+        <div class="d-box b3"><b>Backend</b>Node / Python on 127.0.0.1:3000</div>
+        <div class="d-box b4"><b>Database</b>PostgreSQL on localhost</div>
+      </div>
+    </div>
+  </div>
+
+  <p>Some ideas to keep in mind:</p>
+  <ul>
+    <li><strong>The frontend is just files.</strong> After <code>npm run build</code>, a React, Vue, Svelte or Vite app becomes HTML, CSS and JS files. Any web server can send those to the browser.</li>
+    <li><strong>The backend is a program that keeps running.</strong> Something has to start it, restart it when it crashes, and start it again when the server reboots. systemd does that.</li>
+    <li><strong>Only the reverse proxy faces the internet.</strong> Your backend and database only listen on <code>127.0.0.1</code> (localhost), so nobody can reach them directly.</li>
+    <li><strong>Frontend and API share one domain.</strong> The browser calls <code>/api/...</code> on the same origin, so you don't have to deal with CORS.</li>
+  </ul>
+</section>
+
+<section id="prereqs">
+  <h2>What you need</h2>
+  <ul>
+    <li>A working app: a frontend (React/Vue/etc.) and a backend (Express, Fastify, FastAPI, Django, Go…) in a Git repo.</li>
+    <li>A domain name (~$10/year from Cloudflare Registrar, Namecheap, Porkbun…).</li>
+    <li>A terminal on your computer (macOS/Linux terminal, or Windows Terminal with WSL or PowerShell).</li>
+    <li>About $5/month for a server.</li>
+    <li>Basic comfort with the command line (<code>cd</code>, <code>ls</code>, editing a file with <code>nano</code>).</li>
+  </ul>
+  <div class="callout tip">
+    <div class="callout-title">💡 Placeholders used in this guide</div>
+    <p>Swap in your own values wherever you see these: <code>YOUR_SERVER_IP</code>, <code>myapp.com</code>, <code>myapp</code> (app name), <code>deploy</code> (Linux user), <code>you/your-app</code> (GitHub repo), port <code>3000</code> (backend port).</p>
+  </div>
+</section>
+
+<!-- ================= CONCEPTS ================= -->
+<section id="concepts">
+  <h2>Core concepts (read this once)</h2>
+  <p>Most self-hosting problems come from not knowing <em>which piece</em> is broken. Ten minutes on how a request travels will save you hours of debugging later.</p>
+
+  <h3>What happens when someone visits https://myapp.com</h3>
+  <ol class="flow">
+    <li><strong>DNS lookup:</strong> the browser asks "what IP is myapp.com?" A DNS resolver looks up your domain's <code>A</code> record and answers <code>203.0.113.10</code>. <em>If this is wrong, nothing else matters.</em></li>
+    <li><strong>TCP connection:</strong> the browser opens a connection to <code>203.0.113.10</code> on <strong>port 443</strong>. Your cloud firewall and <code>ufw</code> both have to allow it, or the request <em>times out</em>.</li>
+    <li><strong>TLS handshake:</strong> the server shows a certificate proving it really is myapp.com, and they agree on encryption keys. If the certificate is missing or for the wrong domain, you get a <em>"Your connection is not private"</em> warning.</li>
+    <li><strong>HTTP request:</strong> the browser sends <code>GET /dashboard</code> with headers such as <code>Host: myapp.com</code>.</li>
+    <li><strong>Reverse proxy decides:</strong> Caddy looks at the path. <code>/api/...</code> gets forwarded to <code>127.0.0.1:3000</code>; anything else gets a file from <code>/var/www/myapp</code>.</li>
+    <li><strong>Backend runs your code:</strong> it may query Postgres on <code>localhost:5432</code>, then sends back JSON. If the backend is down, Caddy returns <em>502 Bad Gateway</em>.</li>
+    <li><strong>Response:</strong> Caddy encrypts the response and sends it back. The browser renders the page, and your JS then makes more <code>/api</code> calls, each going through steps 2–7 again.</li>
+  </ol>
+
+  <h3>Ports you'll meet</h3>
+  <table>
+    <tr><th>Port</th><th>Used by</th><th>Open to the internet?</th></tr>
+    <tr><td>22</td><td>SSH (you logging in)</td><td>Yes, ideally restricted to your IP</td></tr>
+    <tr><td>80</td><td>HTTP: redirects to HTTPS, and Let's Encrypt checks</td><td>Yes</td></tr>
+    <tr><td>443</td><td>HTTPS: your actual site</td><td>Yes</td></tr>
+    <tr><td>3000</td><td>Your backend (any number works)</td><td><strong>No</strong>: localhost only</td></tr>
+    <tr><td>5432</td><td>PostgreSQL</td><td><strong>No</strong>: localhost only</td></tr>
+    <tr><td>6379</td><td>Redis (if you use it)</td><td><strong>No</strong>: localhost only</td></tr>
+  </table>
+
+  <h3>Development vs production: what changes</h3>
+  <table>
+    <tr><th></th><th>On your laptop (dev)</th><th>On the server (prod)</th></tr>
+    <tr><td>Frontend</td><td>Vite dev server on <code>localhost:5173</code>, with hot reload</td><td>Pre-built static files served by Caddy</td></tr>
+    <tr><td>Backend</td><td><code>npm run dev</code> / nodemon, restarted by hand</td><td>Built once, run by systemd, restarted automatically</td></tr>
+    <tr><td>Config</td><td><code>.env</code> with dev values</td><td>A separate <code>.env</code> on the server with real secrets</td></tr>
+    <tr><td>Database</td><td>Local Postgres or SQLite, data you don't care about</td><td>Real users' data, so backups are required</td></tr>
+    <tr><td>Errors</td><td>Full stack traces in the browser</td><td>Generic messages to users; details only in the logs</td></tr>
+    <tr><td>URLs</td><td><code>http://localhost:3000</code></td><td><code>https://myapp.com/api</code></td></tr>
+  </table>
+
+  <div class="callout why">
+    <div class="callout-title">🧠 The one idea to remember</div>
+    <p>A "server" is just a computer that's always on and has a public IP address. Everything in this guide is either (a) making sure requests can <em>reach</em> that computer, or (b) making sure the right program on it <em>answers</em>.</p>
+  </div>
+</section>
+
+<!-- ================= LINUX ================= -->
+<section id="linux">
+  <h2>Linux crash course</h2>
+  <p>Your server runs Ubuntu Linux and you'll control it entirely by typing commands. These are the ones you'll actually use.</p>
+
+  <h3>Getting around</h3>
+  <table>
+    <tr><th>Command</th><th>What it does</th></tr>
+    <tr><td><code>pwd</code></td><td>Show which folder you're in</td></tr>
+    <tr><td><code>ls -la</code></td><td>List files, including hidden ones (names starting with <code>.</code>), with permissions</td></tr>
+    <tr><td><code>cd ~/app</code> · <code>cd ..</code> · <code>cd -</code></td><td>Go to a folder · up one level · back to the previous folder</td></tr>
+    <tr><td><code>cat file</code> · <code>less file</code></td><td>Print a file · scroll through it (<kbd>q</kbd> to quit)</td></tr>
+    <tr><td><code>tail -f file</code></td><td>Watch a file grow live (logs)</td></tr>
+    <tr><td><code>mkdir -p a/b/c</code></td><td>Create folders (including parents)</td></tr>
+    <tr><td><code>cp</code> · <code>mv</code> · <code>rm</code> · <code>rm -r</code></td><td>Copy · move/rename · delete a file · delete a folder. <strong>There's no trash can.</strong></td></tr>
+    <tr><td><code>grep -r "text" .</code></td><td>Search for text in files</td></tr>
+    <tr><td><code>sudo command</code></td><td>Run one command as an administrator (root)</td></tr>
+    <tr><td><code>history</code> · <kbd>↑</kbd> · <kbd>Ctrl</kbd>+<kbd>R</kbd></td><td>Previous commands · repeat the last one · search through history</td></tr>
+    <tr><td><code>htop</code> · <code>df -h</code> · <code>free -h</code></td><td>CPU/RAM usage live · disk space · memory</td></tr>
+    <tr><td><code>sudo ss -tlnp</code></td><td>Which programs are listening on which ports</td></tr>
+  </table>
+
+  <h3>Editing files with nano</h3>
+  <p>Open a file with <code>nano path/to/file</code> (add <code>sudo</code> for system files in <code>/etc</code>). The shortcuts are listed at the bottom of the screen, where <code>^</code> means <kbd>Ctrl</kbd>:</p>
+  <table>
+    <tr><th>Keys</th><th>Action</th></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>O</kbd> then <kbd>Enter</kbd></td><td>Save</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>X</kbd></td><td>Exit (it asks to save if there are changes)</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>W</kbd></td><td>Search</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>K</kbd> / <kbd>Ctrl</kbd>+<kbd>U</kbd></td><td>Cut line / paste</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> (most terminals)</td><td>Paste from your clipboard</td></tr>
+  </table>
+
+  <h3>Where things live</h3>
+  <table>
+    <tr><th>Path</th><th>What's there</th></tr>
+    <tr><td><code>/home/deploy</code> (<code>~</code>)</td><td>Your user's home folder: your code, scripts, backups</td></tr>
+    <tr><td><code>/etc</code></td><td>System configuration: <code>/etc/caddy/Caddyfile</code>, <code>/etc/ssh/sshd_config</code></td></tr>
+    <tr><td><code>/etc/systemd/system</code></td><td>Service definitions (your <code>myapp.service</code>)</td></tr>
+    <tr><td><code>/var/www</code></td><td>Website files by convention</td></tr>
+    <tr><td><code>/var/log</code></td><td>Classic log files (most services now log to <code>journalctl</code>)</td></tr>
+    <tr><td><code>/tmp</code></td><td>Temporary files, wiped on reboot</td></tr>
+  </table>
+
+  <h3>Permissions in 60 seconds</h3>
+  <p><code>ls -l</code> shows something like <code>-rw-r--r-- 1 deploy deploy 512 .env</code>. The three groups of <code>rwx</code> are what the <strong>owner</strong>, the <strong>group</strong>, and <strong>everyone else</strong> can do: <b>r</b>ead, <b>w</b>rite, e<b>x</b>ecute. As numbers, r=4, w=2, x=1:</p>
+  <ul>
+    <li><code>chmod 600 file</code>: only the owner can read and write it (secrets, keys)</li>
+    <li><code>chmod 644 file</code>: owner writes, everyone reads (normal files)</li>
+    <li><code>chmod 755 dir</code> or <code>chmod +x script.sh</code>: executable / folder anyone can enter</li>
+    <li><code>sudo chown deploy:deploy file</code>: change who owns it</li>
+  </ul>
+
+  <h3>Survive dropped connections with tmux</h3>
+  <p>If your Wi-Fi drops in the middle of a long command, the command dies with your SSH session. Run long jobs inside <code>tmux</code>:</p>
+  <div class="code"><div class="code-head"><span>server</span></div><pre><code>tmux new -s work        <span class="c"># start a session</span>
+<span class="c"># ... run things ... then detach with Ctrl+B, then D</span>
+tmux attach -t work     <span class="c"># reconnect later, even from a new SSH login</span></code></pre></div>
+</section>
+
+<!-- ================= SAMPLE APP ================= -->
+<section id="sample-app">
+  <h2>A sample app to deploy</h2>
+  <p>Practising with a tiny app first is a good idea: when something breaks, you'll know it's the hosting, not your code. If you already have an app, skim this to see the <strong>folder layout the guide assumes</strong>.</p>
+
+  <h3>Folder layout</h3>
+  <div class="tree">your-app/
+├── backend/
+│   ├── package.json
+│   └── src/
+│       └── index.js
+├── frontend/            ← created by Vite
+│   ├── package.json
+│   ├── vite.config.js
+│   └── src/App.jsx
+└── .gitignore</div>
+
+  <h3>Backend (Express)</h3>
+  <div class="code"><div class="code-head"><span>your computer</span></div><pre><code>mkdir -p your-app/backend/src &amp;&amp; cd your-app/backend
+npm init -y
+npm install express</code></pre></div>
+  <div class="code"><div class="code-head"><span>backend/package.json (edit the relevant parts)</span></div><pre><code>{
+  <span class="s">"name"</span>: <span class="s">"backend"</span>,
+  <span class="s">"type"</span>: <span class="s">"module"</span>,
+  <span class="s">"scripts"</span>: {
+    <span class="s">"dev"</span>: <span class="s">"node --watch src/index.js"</span>,
+    <span class="s">"build"</span>: <span class="s">"rm -rf dist &amp;&amp; cp -r src dist"</span>,
+    <span class="s">"start"</span>: <span class="s">"node dist/index.js"</span>
+  },
+  <span class="s">"dependencies"</span>: { <span class="s">"express"</span>: <span class="s">"^5.1.0"</span> }
+}</code></pre></div>
+  <p class="goal" style="font-size:14px">(The "build" script just copies <code>src</code> to <code>dist</code>. It stands in for a real TypeScript compile so the paths match the rest of the guide.)</p>
+  <div class="code"><div class="code-head"><span>backend/src/index.js</span></div><pre><code><span class="k">import</span> express <span class="k">from</span> <span class="s">"express"</span>;
+
+<span class="k">const</span> app = express();
+app.set(<span class="s">"trust proxy"</span>, 1);        <span class="c">// we'll sit behind Caddy</span>
+app.use(express.json());
+
+app.get(<span class="s">"/api/health"</span>, (req, res) =&gt; {
+  res.json({ ok: <span class="k">true</span>, time: <span class="k">new</span> Date().toISOString() });
+});
+
+app.get(<span class="s">"/api/hello"</span>, (req, res) =&gt; {
+  res.json({ message: <span class="s">"Hello from the backend! 👋"</span>, yourIp: req.ip });
+});
+
+<span class="k">const</span> port = Number(process.env.PORT) || 3000;
+<span class="k">const</span> host = process.env.HOST || <span class="s">"127.0.0.1"</span>;   <span class="c">// Docker sets HOST=0.0.0.0</span>
+app.listen(port, host, () =&gt; console.log(<span class="s">`API listening on http://${host}:${port}`</span>));</code></pre></div>
+
+  <h3>Frontend (React + Vite)</h3>
+  <div class="code"><div class="code-head"><span>your computer (in your-app/)</span></div><pre><code>npm create vite@latest frontend -- --template react
+cd frontend &amp;&amp; npm install</code></pre></div>
+  <div class="code"><div class="code-head"><span>frontend/src/App.jsx (replace contents)</span></div><pre><code><span class="k">import</span> { useEffect, useState } <span class="k">from</span> <span class="s">"react"</span>;
+
+<span class="k">export default function</span> App() {
+  <span class="k">const</span> [msg, setMsg] = useState(<span class="s">"Loading…"</span>);
+
+  useEffect(() =&gt; {
+    fetch(<span class="s">"/api/hello"</span>)
+      .then((r) =&gt; r.json())
+      .then((d) =&gt; setMsg(d.message))
+      .catch(() =&gt; setMsg(<span class="s">"❌ Could not reach the API"</span>));
+  }, []);
+
+  <span class="k">return</span> &lt;h1&gt;{msg}&lt;/h1&gt;;
+}</code></pre></div>
+  <div class="code"><div class="code-head"><span>frontend/vite.config.js</span></div><pre><code><span class="k">import</span> { defineConfig } <span class="k">from</span> <span class="s">"vite"</span>;
+<span class="k">import</span> react <span class="k">from</span> <span class="s">"@vitejs/plugin-react"</span>;
+
+<span class="k">export default</span> defineConfig({
+  plugins: [react()],
+  server: { proxy: { <span class="s">"/api"</span>: <span class="s">"http://localhost:3000"</span> } },  <span class="c">// dev only</span>
+});</code></pre></div>
+
+  <h3>.gitignore and push</h3>
+  <div class="code"><div class="code-head"><span>your-app/.gitignore</span></div><pre><code>node_modules/
+dist/
+.env
+.env.*
+*.log</code></pre></div>
+  <div class="code"><div class="code-head"><span>your computer</span></div><pre><code><span class="c"># test locally: two terminals</span>
+cd backend &amp;&amp; npm run dev
+cd frontend &amp;&amp; npm run dev       <span class="c"># open http://localhost:5173, you should see the hello message</span>
+
+<span class="c"># push to GitHub (create an empty repo there first)</span>
+cd your-app
+git init &amp;&amp; git add . &amp;&amp; git commit -m "first commit"
+git branch -M main
+git remote add origin git@github.com:you/your-app.git
+git push -u origin main</code></pre></div>
+
+  <div class="callout verify">
+    <div class="callout-title">✅ Check before moving on</div>
+    <p>At <code>http://localhost:5173</code> you see "Hello from the backend! 👋", and the code is on GitHub. If it works on your laptop, any problem from here on is a hosting problem.</p>
+  </div>
+</section>
+
+<!-- ================= PART 1 ================= -->
+<div class="part-label">Part 1</div>
+<h2 style="margin-top:10px;border:none">Hosting on your own server</h2>
+<p>We'll set up one Ubuntu server by hand, from nothing to a live HTTPS site with automatic deploys.</p>
+
+<!-- STEP 1 -->
+<section id="step-1">
+  <div class="step-head"><div class="step-num">1</div><h2>Get a server</h2><label class="done-toggle"><input type="checkbox" data-step="1"> Mark done</label></div>
+  <p class="goal">Goal: a fresh Ubuntu machine on the internet with a public IP address.</p>
+
+  <div class="cards">
+    <div class="card"><span class="badge">Best value</span><h4>Hetzner Cloud</h4><p>~€4/mo for 2 vCPU / 4 GB. Simple, fast, EU &amp; US regions.</p></div>
+    <div class="card"><span class="badge">Beginner friendly</span><h4>DigitalOcean / Vultr</h4><p>~$6/mo. Excellent tutorials and a clean dashboard.</p></div>
+    <div class="card"><span class="badge">AWS, simplified</span><h4>AWS Lightsail</h4><p>$5/mo, fixed price. A good way into AWS without the complexity.</p></div>
+    <div class="card"><span class="badge">Full AWS</span><h4>AWS EC2</h4><p>t4g.small / t3.micro. Free tier possible, but more knobs (and more ways to get billed).</p></div>
+  </div>
+
+  <h3>When creating the server, choose:</h3>
+  <ul>
+    <li><strong>Image / OS:</strong> Ubuntu 24.04 LTS</li>
+    <li><strong>Size:</strong> 1–2 GB RAM is enough to start (2 GB makes <code>npm run build</code> more comfortable)</li>
+    <li><strong>Region:</strong> close to your users</li>
+    <li><strong>Authentication:</strong> SSH key (not a password)</li>
+  </ul>
+
+  <h3>Create an SSH key (if you don't have one)</h3>
+  <p>Run this on <strong>your own computer</strong>, not on the server:</p>
+  <div class="code"><div class="code-head"><span>your computer</span></div><pre><code>ssh-keygen -t ed25519 -C "my-laptop"
+<span class="c"># press Enter to accept the default location; set a passphrase if you like</span>
+
+cat ~/.ssh/id_ed25519.pub
+<span class="c"># copy this whole line and paste it into the provider's "SSH key" field</span></code></pre></div>
+
+  <div class="callout info">
+    <div class="callout-title">ℹ️ Public vs private key</div>
+    <p><code>id_ed25519.pub</code> is the <strong>public</strong> key, and it's safe to give to servers. <code>id_ed25519</code> (no <code>.pub</code>) is the <strong>private</strong> key. Never share it or commit it to a repo.</p>
+  </div>
+
+  <p>When the server is created, write down its <strong>public IPv4 address</strong>. That's your <code>YOUR_SERVER_IP</code>.</p>
+
+  <h3>Choosing a size: a rough guide</h3>
+  <table>
+    <tr><th>RAM</th><th>Good for</th></tr>
+    <tr><td>1 GB</td><td>A small API + static frontend. Building on the server needs swap (step 2.6).</td></tr>
+    <tr><td>2 GB</td><td>API + Postgres + builds on the server. <strong>The best starting point.</strong></td></tr>
+    <tr><td>4 GB</td><td>Several apps, Docker, Redis, background workers, or a Next.js SSR app.</td></tr>
+    <tr><td>8 GB+</td><td>Heavy traffic, big databases, or many projects. You can resize later.</td></tr>
+  </table>
+
+  <h3>x86 or ARM?</h3>
+  <p>Many providers offer cheaper <strong>ARM</strong> servers (Hetzner CAX, AWS Graviton <code>t4g</code>). Node, Python, Go, Postgres and most Docker images run fine on ARM. Pick x86 if you depend on an unusual native library or a Docker image that is only published for <code>amd64</code>.</p>
+
+  <h3>Extra options worth turning on</h3>
+  <ul>
+    <li><strong>Backups / snapshots</strong> (~20% extra): the provider takes a copy of the whole disk. It doesn't replace database backups, but it's a cheap safety net.</li>
+    <li><strong>IPv6:</strong> free on most providers. Leave it on.</li>
+    <li><strong>A firewall in the provider dashboard</strong> (Hetzner Firewall, DO Cloud Firewall, AWS Security Group): allow 22, 80 and 443. It blocks traffic before it even reaches your server.</li>
+  </ul>
+
+  <div class="callout verify">
+    <div class="callout-title">✅ Check</div>
+    <p>The dashboard shows the server as <em>Running</em>, and you have its IPv4 address written down.</p>
+  </div>
+</section>
+
+<!-- STEP 2 -->
+<section id="step-2">
+  <div class="step-head"><div class="step-num">2</div><h2>Connect &amp; secure it</h2><label class="done-toggle"><input type="checkbox" data-step="2"> Mark done</label></div>
+  <p class="goal">Goal: log in, create a non-root user, turn on a firewall, and disable password logins.</p>
+
+  <h3>2.1 Log in for the first time</h3>
+  <div class="code"><div class="code-head"><span>your computer</span></div><pre><code>ssh root@YOUR_SERVER_IP
+<span class="c"># On AWS EC2 Ubuntu the user is "ubuntu", not root:</span>
+<span class="c"># ssh -i ~/Downloads/my-key.pem ubuntu@YOUR_SERVER_IP</span></code></pre></div>
+
+  <h3>2.2 Update everything</h3>
+  <div class="code"><div class="code-head"><span>server</span></div><pre><code>apt update &amp;&amp; apt upgrade -y
+apt install -y unattended-upgrades   <span class="c"># auto-install security patches</span></code></pre></div>
+
+  <h3>2.3 Create a normal user</h3>
+  <p>Running everything as <code>root</code> is risky, because one mistake or one hacked app can take over the whole machine. Make a user called <code>deploy</code>:</p>
+  <div class="code"><div class="code-head"><span>server (as root)</span></div><pre><code>adduser deploy                      <span class="c"># set a password; skip the other questions</span>
+usermod -aG sudo deploy             <span class="c"># allow it to use sudo</span>
+rsync --archive --chown=deploy:deploy ~/.ssh /home/deploy   <span class="c"># copy your SSH key to it</span></code></pre></div>
+
+  <h3>2.4 Turn on the firewall</h3>
+  <div class="code"><div class="code-head"><span>server</span></div><pre><code>ufw allow OpenSSH     <span class="c"># port 22 — DO THIS FIRST or you'll lock yourself out</span>
+ufw allow 80          <span class="c"># HTTP</span>
+ufw allow 443         <span class="c"># HTTPS</span>
+ufw enable
+ufw status</code></pre></div>
+
+  <div class="callout warn">
+    <div class="callout-title">⚠️ On AWS EC2 / Lightsail</div>
+    <p>AWS also has its own firewall outside the server, called the <strong>Security Group</strong> on EC2 and the <strong>Networking tab</strong> on Lightsail. Allow inbound TCP 22 (ideally only from your IP), 80 and 443. You need both that firewall and <code>ufw</code> to allow traffic.</p>
+  </div>
+
+  <h3>2.5 Disable password &amp; root login</h3>
+  <p><strong>Leave your current terminal open.</strong> Open a <em>new</em> terminal and make sure this works:</p>
+  <div class="code"><div class="code-head"><span>your computer (new terminal)</span></div><pre><code>ssh deploy@YOUR_SERVER_IP
+sudo whoami     <span class="c"># should print "root"</span></code></pre></div>
+  <p>If it works, edit the SSH config:</p>
+  <p>On Ubuntu 24.04, the main <code>sshd_config</code> loads files from <code>/etc/ssh/sshd_config.d/</code> <em>first</em>, and the first value sshd reads for a setting is the one it uses. Cloud images often include <code>50-cloud-init.conf</code> with <code>PasswordAuthentication yes</code>, which would quietly win over anything you put in the main file. So put your settings in a drop-in file whose name sorts first:</p>
+  <div class="code"><div class="code-head"><span>server</span></div><pre><code>sudo tee /etc/ssh/sshd_config.d/00-hardening.conf &gt; /dev/null &lt;&lt;'EOF'
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin no
+PubkeyAuthentication yes
+EOF
+
+sudo sshd -t                 <span class="c"># test the config: no output = OK</span>
+sudo systemctl restart ssh
+
+<span class="c"># confirm the settings actually in effect:</span>
+sudo sshd -T | grep -Ei 'passwordauthentication|permitrootlogin'
+<span class="c"># → passwordauthentication no</span>
+<span class="c"># → permitrootlogin no</span></code></pre></div>
+  <p>Then open one more new terminal and check that <code>ssh deploy@YOUR_SERVER_IP</code> still works. From here on, always log in as <code>deploy</code>.</p>
+
+  <div class="callout why">
+    <div class="callout-title">🧠 Why this matters</div>
+    <p>A new server with a public IP gets automated login attempts within <em>minutes</em>. Bots try <code>root</code> / <code>admin</code> with thousands of common passwords. With password logins turned off, those attempts can't succeed.</p>
+  </div>
+
+  <div class="callout danger">
+    <div class="callout-title">🚨 Locked out?</div>
+    <p>Every provider has a <strong>web console</strong> or "recovery console" in its dashboard that lets you log in without SSH. Use it to fix <code>sshd_config</code> or <code>ufw</code>.</p>
+  </div>
+
+  <h3>2.6 (Recommended) Add swap memory</h3>
+  <p>Small servers can run out of RAM during <code>npm install</code> or <code>npm run build</code>. Swap gives them some extra (slow) memory to fall back on:</p>
+  <div class="code"><div class="code-head"><span>server</span></div><pre><code>sudo fallocate -l 2G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+free -h      <span class="c"># you should now see 2G of swap</span></code></pre></div>
+
+  <h3>2.7 Shortcut: an SSH config entry</h3>
+  <p>On your computer, add this to <code>~/.ssh/config</code> so you can just type <code>ssh myapp</code>:</p>
+  <div class="code"><div class="code-head"><span>~/.ssh/config (your computer)</span></div><pre><code>Host myapp
+    HostName YOUR_SERVER_IP
+    User deploy</code></pre></div>
+
+  <h3>2.8 Block repeated login attempts with fail2ban</h3>
+  <p>fail2ban watches the SSH logs and temporarily bans IPs that fail too often. On Ubuntu, SSH protection is enabled as soon as you install it:</p>
+  <div class="code"><div class="code-head"><span>server</span></div><pre><code>sudo apt install -y fail2ban
+sudo systemctl enable --now fail2ban
+sudo fail2ban-client status sshd        <span class="c"># shows the number of currently banned IPs</span></code></pre></div>
+
+  <h3>2.9 Small quality-of-life settings</h3>
+  <div class="code"><div class="code-head"><span>server</span></div><pre><code>sudo hostnamectl set-hostname myapp-prod   <span class="c"># a name you'll recognise in the prompt</span>
+sudo timedatectl set-timezone UTC          <span class="c"># keep servers on UTC; convert in the app</span>
+sudo apt install -y htop ncdu tmux curl unzip</code></pre></div>
+
+  <div class="callout verify">
+    <div class="callout-title">✅ Check</div>
+    <p><code>ssh myapp</code> logs you in as <code>deploy</code> without asking for a password. <code>ssh root@YOUR_SERVER_IP</code> is <strong>refused</strong>. <code>sudo ufw status</code> lists only OpenSSH, 80 and 443.</p>
+  </div>
+</section>
+
+<!-- STEP 3 -->
+<section id="step-3">
+  <div class="step-head"><div class="step-num">3</div><h2>Point your domain at the server</h2><label class="done-toggle"><input type="checkbox" data-step="3"> Mark done</label></div>
+  <p class="goal">Goal: make <code>myapp.com</code> resolve to your server's IP.</p>
+
+  <p>Go to wherever your domain's DNS is managed (your registrar, or Cloudflare, which is free and has a very good dashboard) and add:</p>
+  <table>
+    <tr><th>Type</th><th>Name</th><th>Value</th><th>Notes</th></tr>
+    <tr><td><code>A</code></td><td><code>@</code></td><td><code>YOUR_SERVER_IP</code></td><td>the bare domain, myapp.com</td></tr>
+    <tr><td><code>A</code></td><td><code>www</code></td><td><code>YOUR_SERVER_IP</code></td><td>www.myapp.com</td></tr>
+  </table>
+
+  <p>Check that it worked (it can take anywhere from a minute to an hour):</p>
+  <div class="code"><div class="code-head"><span>your computer</span></div><pre><code>dig +short myapp.com      <span class="c"># or: nslookup myapp.com</span>
+<span class="c"># should print YOUR_SERVER_IP</span></code></pre></div>
+
+  <div class="callout warn">
+    <div class="callout-title">⚠️ Using Cloudflare DNS?</div>
+    <p>For now, set the records to <strong>"DNS only" (grey cloud)</strong>. That way your server can get its own HTTPS certificate in step 7 without problems. You can switch to the orange cloud (proxied) later, but if you do, set SSL/TLS mode to <strong>Full (strict)</strong>. See <a href="#cf-proxy">Proxying your VPS</a>.</p>
+  </div>
+
+  <h3>DNS record types you'll use</h3>
+  <table>
+    <tr><th>Type</th><th>Points a name to…</th><th>Example</th></tr>
+    <tr><td><code>A</code></td><td>an IPv4 address</td><td><code>myapp.com → 203.0.113.10</code></td></tr>
+    <tr><td><code>AAAA</code></td><td>an IPv6 address</td><td><code>myapp.com → 2001:db8::1</code> (add it if your server has IPv6)</td></tr>
+    <tr><td><code>CNAME</code></td><td>another name (an alias)</td><td><code>www → myapp.com</code>, or <code>app → dxxxx.cloudfront.net</code></td></tr>
+    <tr><td><code>MX</code></td><td>your email provider</td><td>Google Workspace, Fastmail… <strong>Don't delete these</strong>, or your email stops working.</td></tr>
+    <tr><td><code>TXT</code></td><td>text, used for verification</td><td>domain ownership checks, SPF/DKIM for email</td></tr>
+  </table>
+
+  <h3>TTL and "propagation"</h3>
+  <p>Each record has a <strong>TTL</strong> (time to live): how many seconds resolvers may cache the answer. If the TTL is 3600 and you change the IP, some people will still get the old IP for up to an hour. <strong>Tip:</strong> lower the TTL to 300 (5 min) a day <em>before</em> you plan to move servers, then raise it again afterwards.</p>
+
+  <h3>Subdomains for more services</h3>
+  <p>You can add as many as you like, all pointing at the same server: <code>api.myapp.com</code>, <code>staging.myapp.com</code>, <code>status.myapp.com</code>. Caddy will route each one to the right place (step 12). A wildcard record <code>*</code> → IP covers all of them at once.</p>
+
+  <div class="callout verify">
+    <div class="callout-title">✅ Check</div>
+    <p><code>dig +short myapp.com @1.1.1.1</code> and <code>dig +short www.myapp.com @8.8.8.8</code> both print your server IP. (Asking public resolvers directly avoids stale answers cached on your own machine.)</p>
+  </div>
+</section>
+
+<!-- STEP 4 -->
+<section id="step-4">
+  <div class="step-head"><div class="step-num">4</div><h2>Install your runtime &amp; get your code</h2><label class="done-toggle"><input type="checkbox" data-step="4"> Mark done</label></div>
+  <p class="goal">Goal: your repo cloned on the server, with dependencies installed.</p>
+
+  <h3>4.1 Install the language runtime</h3>
+  <div class="tabs">
+    <div class="tab-list"><button class="tab-btn active">Node.js</button><button class="tab-btn">Python</button><button class="tab-btn">Go</button></div>
+    <div class="tab-panel active">
+      <div class="code"><div class="code-head"><span>server</span></div><pre><code>curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs git build-essential
+node -v &amp;&amp; npm -v</code></pre></div>
+      <p><strong>Use the same major version as your laptop.</strong> Check with <code>node -v</code> on both. Pin it in <code>package.json</code> with <code>"engines": { "node": "22.x" }</code> so nobody gets surprised later. If you need several Node versions on one server, install <a href="https://github.com/nvm-sh/nvm">nvm</a> instead. In that case, use the full path from <code>which node</code> in the systemd <code>ExecStart</code>, because systemd doesn't load nvm.</p>
+    </div>
+    <div class="tab-panel">
+      <div class="code"><div class="code-head"><span>server</span></div><pre><code>sudo apt install -y python3 python3-venv python3-pip git
+python3 --version</code></pre></div>
+    </div>
+    <div class="tab-panel">
+      <p>Go compiles to a single binary. The easiest approach is to build it on your computer (or in CI) and copy it over:</p>
+      <div class="code"><div class="code-head"><span>your computer</span></div><pre><code>GOOS=linux GOARCH=amd64 go build -o myapp ./cmd/server
+scp myapp deploy@YOUR_SERVER_IP:~/app/backend/</code></pre></div>
+    </div>
+  </div>
+
+  <h3>4.2 Let the server pull from GitHub</h3>
+  <p>If your repo is <strong>public</strong>, skip this. If it's <strong>private</strong>, give the server a read-only <em>deploy key</em>:</p>
+  <div class="code"><div class="code-head"><span>server</span></div><pre><code>ssh-keygen -t ed25519 -C "myapp-server" -f ~/.ssh/github_deploy -N ""
+cat ~/.ssh/github_deploy.pub
+<span class="c"># GitHub → your repo → Settings → Deploy keys → Add key (leave "write access" OFF)</span>
+
+cat &gt;&gt; ~/.ssh/config &lt;&lt;'EOF'
+Host github.com
+    IdentityFile ~/.ssh/github_deploy
+EOF</code></pre></div>
+
+  <h3>4.3 Clone and install</h3>
+  <div class="code"><div class="code-head"><span>server</span></div><pre><code>cd ~
+git clone git@github.com:you/your-app.git app     <span class="c"># or the https:// URL if public</span>
+
+<span class="c"># Node backend</span>
+cd ~/app/backend
+npm ci
+npm run build        <span class="c"># only if you use TypeScript / a build step</span>
+
+<span class="c"># Python backend (instead)</span>
+<span class="c"># cd ~/app/backend</span>
+<span class="c"># python3 -m venv .venv</span>
+<span class="c"># .venv/bin/pip install -r requirements.txt</span></code></pre></div>
+
+  <h3>4.4 Create the production environment file</h3>
+  <p>Secrets (database URL, API keys, JWT secret) go in a file that <strong>only lives on the server</strong>:</p>
+  <div class="code"><div class="code-head"><span>~/app/backend/.env</span></div><pre><code>NODE_ENV=production
+PORT=3000
+DATABASE_URL=postgres://myapp:CHANGE_ME@localhost:5432/myapp
+JWT_SECRET=paste-a-long-random-string-here</code></pre></div>
+  <div class="code"><div class="code-head"><span>server</span></div><pre><code>chmod 600 ~/app/backend/.env           <span class="c"># only your user can read it</span>
+openssl rand -hex 32                    <span class="c"># handy way to generate secrets</span></code></pre></div>
+  <div class="callout danger">
+    <div class="callout-title">🚨 Never commit <code>.env</code></div>
+    <p>Make sure <code>.env</code> is in your <code>.gitignore</code>. If a secret ever ends up on GitHub, assume someone has it: <strong>change it</strong> (rotate it). Deleting the commit isn't enough.</p>
+  </div>
+
+  <h3>4.5 Test it by hand</h3>
+  <div class="code"><div class="code-head"><span>server</span></div><pre><code>cd ~/app/backend
+node dist/index.js            <span class="c"># or: npm start / .venv/bin/uvicorn main:app --port 3000</span>
+
+<span class="c"># in a second SSH session:</span>
+curl http://127.0.0.1:3000/api/health</code></pre></div>
+  <p>If you get a response, stop the app with <kbd>Ctrl</kbd>+<kbd>C</kbd>. Next we'll make it run on its own.</p>
+
+  <div class="callout warn">
+    <div class="callout-title">⚠️ Common mistakes here</div>
+    <p>• <code>npm ci</code> fails with "missing package-lock.json": commit your lockfile. It makes sure the server installs exactly the versions you tested.<br>
+    • The build gets <em>Killed</em>: out of memory. Add swap (step 2.6).<br>
+    • <code>EADDRINUSE</code>: something is already on port 3000. Find it with <code>sudo ss -tlnp | grep 3000</code>.<br>
+    • Works locally, crashes on the server: usually a missing environment variable. Compare your local <code>.env</code> keys with the server's.</p>
+  </div>
+
+  <div class="callout tip">
+    <div class="callout-title">💡 Listen on localhost</div>
+    <p>Set your app to listen on <code>127.0.0.1</code> (e.g. <code>app.listen(3000, '127.0.0.1')</code>). Then it can only be reached through the reverse proxy, not directly from the internet. (One exception: inside Docker it has to be <code>0.0.0.0</code>. See step 10.)</p>
+  </div>
+</section>
+
+<!-- STEP 5 -->
+<section id="step-5">
+  <div class="step-head"><div class="step-num">5</div><h2>Keep the backend running</h2><label class="done-toggle"><input type="checkbox" data-step="5"> Mark done</label></div>
+  <p class="goal">Goal: the backend starts on boot, restarts if it crashes, and keeps logs.</p>
+
+  <p><strong>systemd</strong> is Linux's built-in service manager, and it's already installed. You describe your app in a small "unit file":</p>
+
+  <div class="tabs">
+    <div class="tab-list"><button class="tab-btn active">Node.js</button><button class="tab-btn">Python (FastAPI)</button><button class="tab-btn">Python (Django/Flask)</button></div>
+    <div class="tab-panel active">
+      <div class="code"><div class="code-head"><span>/etc/systemd/system/myapp.service</span></div><pre><code><span class="h">[Unit]</span>
+Description=My app backend
+After=network.target
+
+<span class="h">[Service]</span>
+User=deploy
+WorkingDirectory=/home/deploy/app/backend
+EnvironmentFile=/home/deploy/app/backend/.env
+ExecStart=/usr/bin/node dist/index.js
+Restart=always
+RestartSec=3
+
+<span class="h">[Install]</span>
+WantedBy=multi-user.target</code></pre></div>
+    </div>
+    <div class="tab-panel">
+      <div class="code"><div class="code-head"><span>/etc/systemd/system/myapp.service</span></div><pre><code><span class="h">[Unit]</span>
+Description=My app backend
+After=network.target
+
+<span class="h">[Service]</span>
+User=deploy
+WorkingDirectory=/home/deploy/app/backend
+EnvironmentFile=/home/deploy/app/backend/.env
+ExecStart=/home/deploy/app/backend/.venv/bin/uvicorn main:app --host 127.0.0.1 --port 3000 --workers 2
+Restart=always
+RestartSec=3
+
+<span class="h">[Install]</span>
+WantedBy=multi-user.target</code></pre></div>
+    </div>
+    <div class="tab-panel">
+      <div class="code"><div class="code-head"><span>/etc/systemd/system/myapp.service</span></div><pre><code><span class="h">[Unit]</span>
+Description=My app backend
+After=network.target
+
+<span class="h">[Service]</span>
+User=deploy
+WorkingDirectory=/home/deploy/app/backend
+EnvironmentFile=/home/deploy/app/backend/.env
+<span class="c"># first: .venv/bin/pip install gunicorn</span>
+ExecStart=/home/deploy/app/backend/.venv/bin/gunicorn myproject.wsgi:application --bind 127.0.0.1:3000 --workers 3
+Restart=always
+RestartSec=3
+
+<span class="h">[Install]</span>
+WantedBy=multi-user.target</code></pre></div>
+    </div>
+  </div>
+
+  <p>Create the file with <code>sudo nano /etc/systemd/system/myapp.service</code>, paste the content in, then:</p>
+  <div class="code"><div class="code-head"><span>server</span></div><pre><code>sudo systemctl daemon-reload            <span class="c"># reload unit files</span>
+sudo systemctl enable --now myapp       <span class="c"># start now + on every boot</span>
+sudo systemctl status myapp             <span class="c"># should say "active (running)"</span>
+curl http://127.0.0.1:3000/api/health   <span class="c"># test it</span></code></pre></div>
+
+  <h3>The unit file, line by line</h3>
+  <table>
+    <tr><th>Line</th><th>Meaning</th></tr>
+    <tr><td><code>After=network.target</code></td><td>Start once networking is up.</td></tr>
+    <tr><td><code>User=deploy</code></td><td>Run as the unprivileged user, never root.</td></tr>
+    <tr><td><code>WorkingDirectory=</code></td><td>The folder the app starts in (relative paths in your code start from here).</td></tr>
+    <tr><td><code>EnvironmentFile=</code></td><td>Load <code>KEY=value</code> lines from your <code>.env</code>. Write plain <code>KEY=value</code>: no <code>export</code>, no spaces around <code>=</code>.</td></tr>
+    <tr><td><code>ExecStart=</code></td><td>The exact command to run. Must be an <strong>absolute path</strong> (check with <code>which node</code>).</td></tr>
+    <tr><td><code>Restart=always</code> + <code>RestartSec=3</code></td><td>If it crashes, wait 3 seconds and start it again.</td></tr>
+    <tr><td><code>WantedBy=multi-user.target</code></td><td>Lets <code>enable</code> start it on every boot.</td></tr>
+  </table>
+
+  <details>
+    <summary>Optional: extra sandboxing for the service</summary>
+    <p>Add these under <code>[Service]</code> to limit what a compromised app could do. Remove any that break your app:</p>
+    <div class="code"><div class="code-head"><span>[Service] additions</span></div><pre><code>NoNewPrivileges=true      <span class="c"># can't gain root via setuid binaries</span>
+PrivateTmp=true           <span class="c"># private /tmp</span>
+ProtectSystem=full        <span class="c"># /usr, /boot, /etc are read-only to the app</span>
+LimitNOFILE=65535         <span class="c"># allow many open connections</span></code></pre></div>
+  </details>
+
+  <h3>Commands you'll use all the time</h3>
+  <table>
+    <tr><th>Command</th><th>What it does</th></tr>
+    <tr><td><code>sudo systemctl restart myapp</code></td><td>Restart after deploying new code</td></tr>
+    <tr><td><code>sudo systemctl stop myapp</code></td><td>Stop it</td></tr>
+    <tr><td><code>journalctl -u myapp -f</code></td><td>Follow the live logs (<kbd>Ctrl</kbd>+<kbd>C</kbd> to exit)</td></tr>
+    <tr><td><code>journalctl -u myapp -n 100 --no-pager</code></td><td>Last 100 log lines</td></tr>
+    <tr><td><code>journalctl -u myapp --since "1 hour ago"</code></td><td>Logs from a time range</td></tr>
+  </table>
+
+  <details>
+    <summary>Alternative: PM2 (popular with Node developers)</summary>
+    <div class="code"><div class="code-head"><span>server</span></div><pre><code>sudo npm install -g pm2
+cd ~/app/backend
+pm2 start dist/index.js --name myapp
+pm2 save                  <span class="c"># remember the process list</span>
+pm2 startup               <span class="c"># prints a command — copy &amp; run it to start on boot</span>
+pm2 logs myapp            <span class="c"># live logs</span>
+pm2 restart myapp</code></pre></div>
+    <p>PM2 is easy to use, but it's one more tool to learn. systemd is already on every Linux server and works the same way for any language.</p>
+  </details>
+
+  <h3>Keep logs from filling the disk</h3>
+  <div class="code"><div class="code-head"><span>server</span></div><pre><code>sudo mkdir -p /etc/systemd/journald.conf.d
+printf '[Journal]\nSystemMaxUse=500M\n' | sudo tee /etc/systemd/journald.conf.d/size.conf
+sudo systemctl restart systemd-journald</code></pre></div>
+
+  <div class="callout verify">
+    <div class="callout-title">✅ Check</div>
+    <p>Run <code>sudo reboot</code>, wait a minute, SSH back in, and <code>curl 127.0.0.1:3000/api/health</code> responds without you starting anything. Then crash-test it: <code>sudo pkill -f "node dist/index.js"</code>, wait 5 seconds, and curl again. It should be back.</p>
+  </div>
+</section>
+
+<!-- STEP 6 -->
+<section id="step-6">
+  <div class="step-head"><div class="step-num">6</div><h2>Build the frontend</h2><label class="done-toggle"><input type="checkbox" data-step="6"> Mark done</label></div>
+  <p class="goal">Goal: your frontend built into static files in <code>/var/www/myapp</code>.</p>
+
+  <h3>6.1 Make API calls relative</h3>
+  <p>Because the frontend and API will share a domain, call <code>/api/...</code> rather than <code>http://localhost:3000/api/...</code>:</p>
+  <div class="code"><div class="code-head"><span>frontend code</span></div><pre><code><span class="k">const</span> res = <span class="k">await</span> fetch(<span class="s">"/api/users"</span>);   <span class="c">// ✅ works in dev (with a proxy) and prod</span></code></pre></div>
+  <p>In development with Vite, add a proxy so <code>/api</code> still reaches your local backend:</p>
+  <div class="code"><div class="code-head"><span>vite.config.js</span></div><pre><code><span class="k">export default</span> {
+  server: { proxy: { <span class="s">"/api"</span>: <span class="s">"http://localhost:3000"</span> } }
+};</code></pre></div>
+
+  <h3>6.2 Build and copy</h3>
+  <div class="code"><div class="code-head"><span>server</span></div><pre><code>sudo mkdir -p /var/www/myapp
+sudo chown -R deploy:deploy /var/www/myapp     <span class="c"># so deploy can write without sudo</span>
+
+cd ~/app/frontend
+npm ci
+npm run build                                   <span class="c"># Vite → dist/, Create React App → build/</span>
+rsync -a --delete dist/ /var/www/myapp/
+ls /var/www/myapp                               <span class="c"># should show index.html, assets/ …</span></code></pre></div>
+
+  <div class="callout info">
+    <div class="callout-title">ℹ️ Using Next.js, Nuxt, SvelteKit or Remix with server rendering?</div>
+    <p>Then your frontend is <strong>not</strong> just static files. It's a Node server. Run it the same way as the backend: create a second systemd service (e.g. <code>myapp-web.service</code>) with <code>ExecStart=/usr/bin/npm run start</code> on port <code>3001</code>, and have Caddy send <code>/</code> to <code>127.0.0.1:3001</code> instead of serving files. For Next.js, <code>output: "standalone"</code> in <code>next.config.js</code> makes the build much smaller.</p>
+  </div>
+
+  <h3>6.3 Frontend environment variables are public</h3>
+  <p>Variables like <code>VITE_API_URL</code> or <code>NEXT_PUBLIC_*</code> are <strong>baked into the JavaScript at build time</strong>, and anyone can read them in DevTools. Never put secrets there. Put a <code>frontend/.env.production</code> on the server (or set the variables in CI) <em>before</em> running <code>npm run build</code>, and rebuild whenever they change.</p>
+
+  <h3>6.4 How caching works for a built frontend</h3>
+  <p>Vite gives built files a content hash in their names, like <code>assets/index-4f8a2c.js</code>. When the code changes, the name changes too. That means:</p>
+  <ul>
+    <li><code>/assets/*</code> can be cached <strong>forever</strong>: new code gets a new file name.</li>
+    <li><code>index.html</code> must <strong>never</strong> be cached for long, because it's what points to the newest asset names. If browsers cache it, users get the old site after a deploy.</li>
+  </ul>
+  <p>The Caddy and Nginx configs in the next step are set up this way.</p>
+
+  <div class="callout verify">
+    <div class="callout-title">✅ Check</div>
+    <p><code>ls /var/www/myapp</code> shows <code>index.html</code> and an <code>assets/</code> folder.</p>
+  </div>
+</section>
+
+<!-- STEP 7 -->
+<section id="step-7">
+  <div class="step-head"><div class="step-num">7</div><h2>Reverse proxy &amp; HTTPS</h2><label class="done-toggle"><input type="checkbox" data-step="7"> Mark done</label></div>
+  <p class="goal">Goal: <code>https://myapp.com</code> serves the frontend, and <code>/api</code> goes to the backend, with a valid certificate.</p>
+
+  <p>The <strong>reverse proxy</strong> is the only program that faces the public internet. It handles HTTPS, serves static files, and forwards API requests to your backend. Pick one:</p>
+
+  <div class="tabs">
+    <div class="tab-list"><button class="tab-btn active">Caddy (recommended)</button><button class="tab-btn">Nginx + Certbot</button></div>
+
+    <div class="tab-panel active">
+      <p>Caddy <strong>gets and renews HTTPS certificates automatically</strong> and needs very little config.</p>
+      <div class="code"><div class="code-head"><span>server</span></div><pre><code>sudo apt install -y caddy
+sudo nano /etc/caddy/Caddyfile      <span class="c"># replace everything with the config below</span></code></pre></div>
+      <div class="code"><div class="code-head"><span>/etc/caddy/Caddyfile</span></div><pre><code>myapp.com, www.myapp.com {
+    encode gzip zstd
+
+    <span class="c"># API → backend</span>
+    handle /api/* {
+        reverse_proxy 127.0.0.1:3000
+    }
+
+    <span class="c"># Everything else → frontend files</span>
+    handle {
+        root * /var/www/myapp
+        try_files {path} /index.html     <span class="c"># makes client-side routing work on refresh</span>
+        file_server
+    }
+
+    <span class="c"># Cache hashed assets for a long time</span>
+    @assets path /assets/*
+    header @assets Cache-Control "public, max-age=31536000, immutable"
+}</code></pre></div>
+      <div class="code"><div class="code-head"><span>server</span></div><pre><code>caddy validate --config /etc/caddy/Caddyfile   <span class="c"># check for typos</span>
+sudo systemctl reload caddy
+journalctl -u caddy -f                          <span class="c"># watch it obtain the certificate</span></code></pre></div>
+      <p>Want <code>www</code> to redirect to the bare domain? Replace the first line with <code>myapp.com {</code> and add a separate block:</p>
+      <div class="code"><div class="code-head"><span>Caddyfile addition</span></div><pre><code>www.myapp.com {
+    redir https://myapp.com{uri} permanent
+}</code></pre></div>
+
+      <h4>The Caddyfile, explained</h4>
+      <table>
+        <tr><th>Directive</th><th>What it does</th></tr>
+        <tr><td><code>myapp.com, www.myapp.com {</code></td><td>Which domains this block handles. Caddy gets a certificate for each one and redirects HTTP to HTTPS.</td></tr>
+        <tr><td><code>encode gzip zstd</code></td><td>Compresses responses so pages load faster.</td></tr>
+        <tr><td><code>handle /api/* { … }</code></td><td>Requests whose path starts with <code>/api/</code>. The path is passed on <em>unchanged</em>, so your backend sees <code>/api/hello</code>.</td></tr>
+        <tr><td><code>handle_path /api/* { … }</code></td><td>(Alternative) <em>removes</em> the <code>/api</code> prefix, so the backend sees <code>/hello</code>. Use it if your routes don't start with /api.</td></tr>
+        <tr><td><code>reverse_proxy 127.0.0.1:3000</code></td><td>Forwards the request and adds <code>X-Forwarded-For</code>/<code>-Proto</code> headers. WebSockets work automatically.</td></tr>
+        <tr><td><code>try_files {path} /index.html</code></td><td>Serves the file if it exists, otherwise <code>index.html</code>, so React Router or Vue Router can handle the URL.</td></tr>
+        <tr><td><code>file_server</code></td><td>Actually sends the files.</td></tr>
+      </table>
+
+      <h4>Add security headers</h4>
+      <p>Put this inside the site block. Then check your site at <a href="https://securityheaders.com">securityheaders.com</a>:</p>
+      <div class="code"><div class="code-head"><span>Caddyfile addition</span></div><pre><code>    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+    <span class="c"># never cache index.html, so users get new deploys right away</span>
+    @html path / /index.html
+    header @html Cache-Control "no-cache"
+
+    <span class="c"># allow uploads up to 20 MB (default is unlimited, so set a limit)</span>
+    request_body {
+        max_size 20MB
+    }</code></pre></div>
+
+      <h4>Alternative: API on its own subdomain</h4>
+      <p>If you'd rather use <code>api.myapp.com</code> (for example because the frontend lives on Cloudflare Pages), add an <code>A</code> record for <code>api</code> and a second block:</p>
+      <div class="code"><div class="code-head"><span>Caddyfile</span></div><pre><code>api.myapp.com {
+    reverse_proxy 127.0.0.1:3000
+}</code></pre></div>
+      <p>Then you'll need CORS on the backend. See <a href="#cf-split">Pages + VPS API</a>.</p>
+    </div>
+
+    <div class="tab-panel">
+      <div class="code"><div class="code-head"><span>server</span></div><pre><code>sudo apt install -y nginx certbot python3-certbot-nginx
+sudo nano /etc/nginx/sites-available/myapp</code></pre></div>
+      <div class="code"><div class="code-head"><span>/etc/nginx/sites-available/myapp</span></div><pre><code>server {
+    listen 80;
+    server_name myapp.com www.myapp.com;
+
+    root /var/www/myapp;
+    index index.html;
+    gzip on;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+
+    location / {
+        try_files $uri /index.html;
+    }
+
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;       <span class="c"># websockets</span>
+        proxy_set_header Connection "upgrade";
+    }
+}</code></pre></div>
+      <div class="code"><div class="code-head"><span>server</span></div><pre><code>sudo ln -s /etc/nginx/sites-available/myapp /etc/nginx/sites-enabled/
+sudo rm /etc/nginx/sites-enabled/default
+sudo nginx -t                       <span class="c"># test config</span>
+sudo systemctl reload nginx
+
+<span class="c"># get a free Let's Encrypt certificate (auto-edits the config for HTTPS)</span>
+sudo certbot --nginx -d myapp.com -d www.myapp.com
+sudo certbot renew --dry-run        <span class="c"># confirm auto-renewal works</span></code></pre></div>
+    </div>
+  </div>
+
+  <h3>Test it 🎉</h3>
+  <p>Open <code>https://myapp.com</code> in your browser. You should see your frontend with a padlock in the address bar, and its API calls should work. Your app is now live on infrastructure you control.</p>
+
+  <div class="callout tip">
+    <div class="callout-title">💡 Tell your backend it's behind a proxy</div>
+    <p>So it sees real client IPs and knows the request came over HTTPS: in Express use <code>app.set("trust proxy", 1)</code>; in FastAPI/uvicorn add <code>--proxy-headers</code>; in Django set <code>SECURE_PROXY_SSL_HEADER</code>.</p>
+  </div>
+
+  <div class="callout verify">
+    <div class="callout-title">✅ Check: run these from your laptop</div>
+    <p><code>curl -I http://myapp.com</code> → <code>308</code> redirect to https<br>
+    <code>curl -I https://myapp.com</code> → <code>200</code><br>
+    <code>curl https://myapp.com/api/health</code> → <code>{"ok":true,…}</code><br>
+    <code>curl -I https://myapp.com/some/deep/route</code> → <code>200</code> (SPA fallback works)<br>
+    <code>curl --max-time 5 http://YOUR_SERVER_IP:3000</code> → <strong>times out or is refused</strong> (backend is not exposed)<br>
+    For a full HTTPS report, try <a href="https://www.ssllabs.com/ssltest/">SSL Labs</a>. You should get an A.</p>
+  </div>
+</section>
+
+<!-- STEP 8 -->
+<section id="step-8">
+  <div class="step-head"><div class="step-num">8</div><h2>Database &amp; backups</h2><label class="done-toggle"><input type="checkbox" data-step="8"> Mark done</label></div>
+  <p class="goal">Goal: a PostgreSQL database your backend can use, backed up every night.</p>
+
+  <h3>Option A: Postgres on the same server (cheapest, good for learning)</h3>
+  <div class="code"><div class="code-head"><span>server</span></div><pre><code>sudo apt install -y postgresql
+sudo -u postgres psql</code></pre></div>
+  <div class="code"><div class="code-head"><span>psql</span></div><pre><code><span class="k">CREATE USER</span> myapp <span class="k">WITH PASSWORD</span> <span class="s">'CHANGE_ME'</span>;
+<span class="k">CREATE DATABASE</span> myapp <span class="k">OWNER</span> myapp;
+\q</code></pre></div>
+  <p>Postgres only listens on <code>localhost</code> by default, which is what you want. Don't open port 5432 in the firewall. Your <code>.env</code> from step 4 already has the right <code>DATABASE_URL</code>. Run your migrations (e.g. <code>npx prisma migrate deploy</code>, <code>alembic upgrade head</code>, <code>python manage.py migrate</code>), then <code>sudo systemctl restart myapp</code>.</p>
+
+  <div class="callout tip">
+    <div class="callout-title">💡 Connect from your laptop safely</div>
+    <p>Use an SSH tunnel instead of opening the port: <code>ssh -L 5433:localhost:5432 myapp</code>, then point TablePlus, DBeaver or pgAdmin at <code>localhost:5433</code>.</p>
+  </div>
+
+  <h4>Connecting from your code</h4>
+  <div class="code"><div class="code-head"><span>backend: npm install pg</span></div><pre><code><span class="k">import</span> pg <span class="k">from</span> <span class="s">"pg"</span>;
+
+<span class="c">// one shared pool for the whole app: don't create a new connection per request</span>
+<span class="k">export const</span> pool = <span class="k">new</span> pg.Pool({
+  connectionString: process.env.DATABASE_URL,
+  max: 10,                      <span class="c">// max simultaneous connections</span>
+});
+
+<span class="c">// usage</span>
+<span class="k">const</span> { rows } = <span class="k">await</span> pool.query(<span class="s">"SELECT * FROM users WHERE id = $1"</span>, [id]);</code></pre></div>
+  <p>Always use <strong>parameters</strong> (<code>$1</code>) rather than putting user input directly into the SQL string. That's how you prevent SQL injection.</p>
+
+  <h4>Migrations</h4>
+  <p>A <em>migration</em> is a versioned script that changes the database schema (add a table, add a column). Your ORM keeps track of which ones have already been applied. Run them on every deploy, <strong>before</strong> restarting the app:</p>
+  <table>
+    <tr><th>Tool</th><th>Production command</th></tr>
+    <tr><td>Prisma</td><td><code>npx prisma migrate deploy</code></td></tr>
+    <tr><td>Drizzle</td><td><code>npx drizzle-kit migrate</code></td></tr>
+    <tr><td>Knex</td><td><code>npx knex migrate:latest</code></td></tr>
+    <tr><td>Alembic (Python)</td><td><code>alembic upgrade head</code></td></tr>
+    <tr><td>Django</td><td><code>python manage.py migrate</code></td></tr>
+  </table>
+  <div class="callout warn">
+    <div class="callout-title">⚠️ Never use "dev" migration commands in production</div>
+    <p>Commands like <code>prisma migrate dev</code> or <code>prisma db push --accept-data-loss</code> may <em>reset</em> the database. In production, only use the "deploy/apply" variants shown above.</p>
+  </div>
+
+  <h3>Option B: A managed database (less work to run)</h3>
+  <p>AWS RDS, Neon, Supabase, DigitalOcean Managed DB and similar services handle backups, updates and failover for you. Put the connection string they give you in <code>DATABASE_URL</code>. It costs more (or has free-tier limits), but you don't have to worry about losing data.</p>
+
+  <h3>Backups (do not skip this)</h3>
+  <div class="callout danger">
+    <div class="callout-title">🚨 If the server dies, the database goes with it</div>
+    <p>With Option A, you're responsible for backups. A backup kept on the same server only protects you from mistakes, not from losing the server. Copy backups somewhere else too.</p>
+  </div>
+  <div class="code"><div class="code-head"><span>server: store the DB password for pg_dump</span></div><pre><code>echo "localhost:5432:myapp:myapp:CHANGE_ME" &gt; ~/.pgpass
+chmod 600 ~/.pgpass
+mkdir -p ~/backups</code></pre></div>
+  <div class="code"><div class="code-head"><span>~/backup.sh</span></div><pre><code><span class="c">#!/bin/bash</span>
+set -euo pipefail
+STAMP=$(date +%F_%H%M)
+pg_dump -h localhost -U myapp myapp | gzip &gt; ~/backups/myapp-$STAMP.sql.gz
+
+<span class="c"># keep 14 days locally</span>
+find ~/backups -name "*.sql.gz" -mtime +14 -delete
+
+<span class="c"># OPTIONAL: copy off-server (needs AWS CLI or rclone configured)</span>
+<span class="c"># aws s3 cp ~/backups/myapp-$STAMP.sql.gz s3://my-backup-bucket/</span>
+<span class="c"># rclone copy ~/backups/myapp-$STAMP.sql.gz r2:my-backups/</span></code></pre></div>
+  <div class="code"><div class="code-head"><span>server</span></div><pre><code>chmod +x ~/backup.sh
+~/backup.sh &amp;&amp; ls -lh ~/backups     <span class="c"># test it</span>
+
+crontab -e
+<span class="c"># add this line → runs every night at 3:00 AM</span>
+0 3 * * * /home/deploy/backup.sh &gt;&gt; /home/deploy/backups/backup.log 2&gt;&amp;1</code></pre></div>
+  <p><strong>Restoring:</strong> <code>gunzip -c ~/backups/FILE.sql.gz | psql -h localhost -U myapp myapp</code>. Try a restore at least once. A backup you've never restored from might not actually work.</p>
+
+  <h3>Restore drill (do this now, not during an emergency)</h3>
+  <p>Restore into a <em>scratch</em> database so you don't touch real data:</p>
+  <div class="code"><div class="code-head"><span>server</span></div><pre><code>sudo -u postgres createdb -O myapp restore_test
+echo "localhost:5432:restore_test:myapp:CHANGE_ME" &gt;&gt; ~/.pgpass
+
+LATEST=$(ls -t ~/backups/*.sql.gz | head -1)
+gunzip -c "$LATEST" | psql -h localhost -U myapp restore_test
+
+psql -h localhost -U myapp restore_test -c '\dt'      <span class="c"># tables are there?</span>
+sudo -u postgres dropdb restore_test                  <span class="c"># clean up</span></code></pre></div>
+
+  <h3>Off-server copies with rclone + Cloudflare R2 (or S3)</h3>
+  <p>R2 has a free tier (10 GB) and charges nothing for downloads, so it's a good fit for backups.</p>
+  <ol>
+    <li>Cloudflare dashboard → <em>R2</em> → create a bucket called <code>myapp-backups</code>.</li>
+    <li><em>R2 → Manage API tokens</em> → create a token with <strong>Object Read &amp; Write</strong> for that bucket. Copy the Access Key ID, Secret, and the endpoint (<code>https://ACCOUNT_ID.r2.cloudflarestorage.com</code>).</li>
+    <li>On the server:</li>
+  </ol>
+  <div class="code"><div class="code-head"><span>server</span></div><pre><code>sudo apt install -y rclone
+rclone config
+<span class="c"># n (new remote) → name: r2 → storage: s3 → provider: Cloudflare</span>
+<span class="c"># paste access key + secret → endpoint: https://ACCOUNT_ID.r2.cloudflarestorage.com</span>
+<span class="c"># accept defaults for the rest</span>
+
+rclone ls r2:myapp-backups                 <span class="c"># test: should list nothing (empty bucket), no error</span></code></pre></div>
+  <p>Then uncomment the <code>rclone copy</code> line in <code>backup.sh</code>. In R2, add a <strong>lifecycle rule</strong> to delete objects older than 30–90 days.</p>
+
+  <div class="callout verify">
+    <div class="callout-title">✅ Check</div>
+    <p>Your app reads and writes data. <code>ls ~/backups</code> shows a dump file. The restore drill worked. The backup file appears in R2/S3.</p>
+  </div>
+</section>
+
+<!-- STEP 9 -->
+<section id="step-9">
+  <div class="step-head"><div class="step-num">9</div><h2>Deploy updates</h2><label class="done-toggle"><input type="checkbox" data-step="9"> Mark done</label></div>
+  <p class="goal">Goal: run one command to deploy, then have GitHub run it for you whenever you push.</p>
+
+  <h3>9.1 Allow restarting the app without a password</h3>
+  <div class="code"><div class="code-head"><span>server</span></div><pre><code>sudo visudo -f /etc/sudoers.d/deploy
+<span class="c"># add this single line, save, exit:</span>
+deploy ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart myapp</code></pre></div>
+
+  <h3>9.2 A deploy script</h3>
+  <div class="code"><div class="code-head"><span>~/deploy.sh</span></div><pre><code><span class="c">#!/bin/bash</span>
+set -euo pipefail
+echo "▶ Pulling latest code"
+cd ~/app
+git fetch origin main
+git reset --hard origin/main
+
+echo "▶ Backend"
+cd ~/app/backend
+npm ci
+npm run build
+<span class="c"># npx prisma migrate deploy     # ← run DB migrations here if you use them</span>
+sudo systemctl restart myapp
+
+echo "▶ Frontend"
+cd ~/app/frontend
+npm ci
+npm run build
+rsync -a --delete dist/ /var/www/myapp/
+
+echo "▶ Health check"
+sleep 2
+curl -fsS http://127.0.0.1:3000/api/health &gt; /dev/null &amp;&amp; echo "✅ Deployed!"</code></pre></div>
+  <div class="code"><div class="code-head"><span>server</span></div><pre><code>chmod +x ~/deploy.sh
+~/deploy.sh</code></pre></div>
+  <p>You can now deploy from your laptop with: <code>ssh myapp ./deploy.sh</code></p>
+
+  <h3>9.3 Automatic deploys with GitHub Actions</h3>
+  <p><strong>a)</strong> On <em>your computer</em>, create a separate key just for CI:</p>
+  <div class="code"><div class="code-head"><span>your computer</span></div><pre><code>ssh-keygen -t ed25519 -C "github-actions" -f ~/.ssh/gha_deploy -N ""
+ssh-copy-id -i ~/.ssh/gha_deploy.pub deploy@YOUR_SERVER_IP
+cat ~/.ssh/gha_deploy        <span class="c"># the PRIVATE key → goes into a GitHub secret</span></code></pre></div>
+  <p><strong>b)</strong> On GitHub: repo → <em>Settings → Secrets and variables → Actions</em>, add:</p>
+  <ul>
+    <li><code>SERVER_HOST</code>: your server IP</li>
+    <li><code>SSH_PRIVATE_KEY</code>: the full contents of <code>~/.ssh/gha_deploy</code></li>
+  </ul>
+  <p><strong>c)</strong> Add the workflow file to your repo:</p>
+  <div class="code"><div class="code-head"><span>.github/workflows/deploy.yml</span></div><pre><code><span class="k">name:</span> Deploy
+<span class="k">on:</span>
+  <span class="k">push:</span>
+    <span class="k">branches:</span> [main]
+
+<span class="k">jobs:</span>
+  <span class="k">deploy:</span>
+    <span class="k">runs-on:</span> ubuntu-latest
+    <span class="k">steps:</span>
+      - <span class="k">name:</span> Deploy over SSH
+        <span class="k">uses:</span> appleboy/ssh-action@v1
+        <span class="k">with:</span>
+          <span class="k">host:</span> ${{ secrets.SERVER_HOST }}
+          <span class="k">username:</span> deploy
+          <span class="k">key:</span> ${{ secrets.SSH_PRIVATE_KEY }}
+          <span class="k">script:</span> ~/deploy.sh</code></pre></div>
+  <p>Push to <code>main</code> and watch the <em>Actions</em> tab. You now have your own push-to-deploy. 🚀</p>
+
+  <h3>9.4 Better: build in CI, then upload</h3>
+  <p>The simple script above builds <em>on the server</em>. That uses the server's RAM, and if the build breaks halfway, your site may be left half-updated. A sturdier approach is to build and test on GitHub's machines and only upload the result:</p>
+  <div class="code"><div class="code-head"><span>.github/workflows/deploy.yml (build-in-CI version)</span></div><pre><code><span class="k">name:</span> Build &amp; Deploy
+<span class="k">on:</span>
+  <span class="k">push:</span>
+    <span class="k">branches:</span> [main]
+
+<span class="k">concurrency:</span> production          <span class="c"># never run two deploys at once</span>
+
+<span class="k">jobs:</span>
+  <span class="k">deploy:</span>
+    <span class="k">runs-on:</span> ubuntu-latest
+    <span class="k">steps:</span>
+      - <span class="k">uses:</span> actions/checkout@v4
+
+      - <span class="k">uses:</span> actions/setup-node@v4
+        <span class="k">with:</span>
+          <span class="k">node-version:</span> 22
+
+      - <span class="k">name:</span> Build frontend
+        <span class="k">working-directory:</span> frontend
+        <span class="k">run:</span> npm ci &amp;&amp; npm run build
+
+      - <span class="k">name:</span> Build &amp; test backend
+        <span class="k">working-directory:</span> backend
+        <span class="k">run:</span> npm ci &amp;&amp; npm test --if-present &amp;&amp; npm run build
+
+      - <span class="k">name:</span> Set up SSH
+        <span class="k">run:</span> |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" &gt; ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} &gt;&gt; ~/.ssh/known_hosts
+
+      - <span class="k">name:</span> Upload &amp; restart
+        <span class="k">env:</span>
+          <span class="k">HOST:</span> deploy@${{ secrets.SERVER_HOST }}
+        <span class="k">run:</span> |
+          rsync -az --delete frontend/dist/ $HOST:/var/www/myapp/
+          rsync -az --delete --exclude node_modules --exclude .env backend/ $HOST:~/app/backend/
+          ssh $HOST 'cd ~/app/backend &amp;&amp; npm ci --omit=dev &amp;&amp; sudo systemctl restart myapp'
+          ssh $HOST 'sleep 2 &amp;&amp; curl -fsS http://127.0.0.1:3000/api/health'</code></pre></div>
+  <p><code>--exclude .env</code> also stops <code>--delete</code> from removing the server's <code>.env</code>, because rsync leaves excluded files alone.</p>
+
+  <h3>9.5 Rollbacks: keep old releases around</h3>
+  <p>When a deploy breaks production, you want to get back to the old version in seconds. A common pattern is to put every deploy in its own folder and point a <code>current</code> symlink at the live one:</p>
+  <div class="tree">~/releases/
+├── 20261117-1402/
+├── 20261117-1630/
+├── 20261118-0915/     ← newest
+└── current → 20261118-0915   (symlink)</div>
+  <div class="code"><div class="code-head"><span>~/deploy-release.sh</span></div><pre><code><span class="c">#!/bin/bash</span>
+set -euo pipefail
+REPO=git@github.com:you/your-app.git
+BASE=~/releases
+REL=$BASE/$(date +%Y%m%d-%H%M)
+
+git clone --depth 1 "$REPO" "$REL"
+ln -s ~/shared/.env "$REL/backend/.env"         <span class="c"># keep .env outside releases, in ~/shared</span>
+
+(cd "$REL/backend"  &amp;&amp; npm ci &amp;&amp; npm run build)
+(cd "$REL/frontend" &amp;&amp; npm ci &amp;&amp; npm run build)
+
+<span class="c"># switch over only after everything built successfully</span>
+ln -sfn "$REL" "$BASE/current"
+rsync -a --delete "$REL/frontend/dist/" /var/www/myapp/
+sudo systemctl restart myapp
+
+<span class="c"># keep the 5 newest releases</span>
+ls -1dt $BASE/2* | tail -n +6 | xargs -r rm -rf
+echo "✅ Live: $REL"</code></pre></div>
+  <div class="code"><div class="code-head"><span>~/rollback.sh</span></div><pre><code><span class="c">#!/bin/bash</span>
+set -euo pipefail
+BASE=~/releases
+PREV=$(ls -1dt $BASE/2* | sed -n 2p)            <span class="c"># second-newest release</span>
+ln -sfn "$PREV" "$BASE/current"
+rsync -a --delete "$PREV/frontend/dist/" /var/www/myapp/
+sudo systemctl restart myapp
+echo "↩️  Rolled back to $PREV"</code></pre></div>
+  <p>For this to work, point your systemd unit at the symlink: <code>WorkingDirectory=/home/deploy/releases/current/backend</code>. Move your <code>.env</code> to <code>~/shared/.env</code> and set <code>EnvironmentFile</code> to that path. (Database migrations aren't undone by a rollback, so write migrations that the previous version of the code can still work with.)</p>
+
+  <div class="callout info">
+    <div class="callout-title">ℹ️ Zero-downtime deploys</div>
+    <p>Restarting the service means a second or two where requests fail. To avoid that, run two copies of the app (say on ports 3000 and 3001) with <code>reverse_proxy 127.0.0.1:3000 127.0.0.1:3001</code> plus <code>lb_try_duration 5s</code>, and restart them one at a time. Caddy sends traffic to whichever one is up. Docker setups and platforms like ECS do this kind of rolling update for you.</p>
+  </div>
+
+  <div class="callout verify">
+    <div class="callout-title">✅ Check</div>
+    <p>Change the hello message, push to <code>main</code>, and within a couple of minutes <code>https://myapp.com</code> shows the new text without you touching the server.</p>
+  </div>
+</section>
+
+<!-- STEP 10 -->
+<section id="step-10">
+  <div class="step-head"><div class="step-num">10</div><h2>Level up with Docker</h2><label class="done-toggle"><input type="checkbox" data-step="10"> Mark done</label></div>
+  <p class="goal">Goal: describe the whole stack in files, so you can rebuild the server or move to a new one in minutes.</p>
+
+  <p>Once steps 1–9 make sense, Docker lets you pack each piece (app, database, proxy) into a <em>container</em> and start them all with one command. It's also how most cloud platforms (ECS, Fly.io, Cloud Run) expect to receive your app.</p>
+
+  <h3>10.1 Install Docker</h3>
+  <div class="code"><div class="code-head"><span>server</span></div><pre><code>curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker deploy      <span class="c"># then log out and back in</span>
+docker run --rm hello-world</code></pre></div>
+
+  <h3>10.2 Dockerfile for the backend</h3>
+  <div class="code"><div class="code-head"><span>backend/Dockerfile</span></div><pre><code><span class="k">FROM</span> node:22-alpine
+<span class="k">WORKDIR</span> /app
+<span class="k">COPY</span> package*.json ./
+<span class="k">RUN</span> npm ci
+<span class="k">COPY</span> . .
+<span class="k">RUN</span> npm run build
+<span class="k">ENV</span> NODE_ENV=production
+<span class="k">EXPOSE</span> 3000
+<span class="k">CMD</span> ["node", "dist/index.js"]</code></pre></div>
+  <p>Add a <code>backend/.dockerignore</code> containing <code>node_modules</code>, <code>.env</code> and <code>dist</code>.</p>
+  <div class="callout warn">
+    <div class="callout-title">⚠️ Inside Docker, listen on 0.0.0.0</div>
+    <p>A container's <code>127.0.0.1</code> is private to that container, so other containers (like Caddy) can't reach it. Use <code>app.listen(3000, "0.0.0.0")</code> in the container. That's still safe, because we won't publish the port to the internet.</p>
+  </div>
+
+  <h3>10.3 docker-compose.yml: the whole stack</h3>
+  <div class="code"><div class="code-head"><span>docker-compose.yml (repo root)</span></div><pre><code><span class="k">services:</span>
+  <span class="k">api:</span>
+    <span class="k">build:</span> ./backend
+    <span class="k">restart:</span> unless-stopped
+    <span class="k">env_file:</span> ./backend/.env
+    <span class="k">environment:</span>
+      <span class="k">DATABASE_URL:</span> postgres://myapp:CHANGE_ME@db:5432/myapp
+    <span class="k">depends_on:</span> [db]
+
+  <span class="k">db:</span>
+    <span class="k">image:</span> postgres:17
+    <span class="k">restart:</span> unless-stopped
+    <span class="k">environment:</span>
+      <span class="k">POSTGRES_USER:</span> myapp
+      <span class="k">POSTGRES_PASSWORD:</span> CHANGE_ME
+      <span class="k">POSTGRES_DB:</span> myapp
+    <span class="k">volumes:</span>
+      - pgdata:/var/lib/postgresql/data
+
+  <span class="k">caddy:</span>
+    <span class="k">image:</span> caddy:2
+    <span class="k">restart:</span> unless-stopped
+    <span class="k">ports:</span>
+      - <span class="s">"80:80"</span>
+      - <span class="s">"443:443"</span>
+    <span class="k">volumes:</span>
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - ./frontend/dist:/srv
+      - caddy_data:/data
+
+<span class="k">volumes:</span>
+  <span class="k">pgdata:</span>
+  <span class="k">caddy_data:</span></code></pre></div>
+  <div class="code"><div class="code-head"><span>Caddyfile (repo root, Docker version)</span></div><pre><code>myapp.com {
+    encode gzip zstd
+    handle /api/* {
+        reverse_proxy api:3000        <span class="c"># "api" = the service name in compose</span>
+    }
+    handle {
+        root * /srv
+        try_files {path} /index.html
+        file_server
+    }
+}</code></pre></div>
+  <div class="code"><div class="code-head"><span>server</span></div><pre><code><span class="c"># stop the non-Docker versions first so ports 80/443 are free</span>
+sudo systemctl disable --now caddy myapp
+
+cd ~/app/frontend &amp;&amp; npm ci &amp;&amp; npm run build
+cd ~/app
+docker compose up -d --build       <span class="c"># start everything</span>
+docker compose ps                  <span class="c"># status</span>
+docker compose logs -f api         <span class="c"># logs</span></code></pre></div>
+
+  <div class="callout danger">
+    <div class="callout-title">🚨 Docker gets around ufw</div>
+    <p>Ports you publish with <code>ports:</code> are reachable from the internet <strong>even if ufw blocks them</strong>, because Docker writes its own firewall rules. Only publish 80 and 443. Never add <code>ports: ["5432:5432"]</code> to the database. (Your cloud provider's firewall, like an AWS Security Group, still applies.)</p>
+  </div>
+
+  <h3>10.4 Production-grade Dockerfiles</h3>
+  <p>The simple Dockerfile above ships your dev dependencies and source code, and runs as root. A <strong>multi-stage</strong> build produces a smaller, safer image:</p>
+  <div class="tabs">
+    <div class="tab-list"><button class="tab-btn active">Node (multi-stage)</button><button class="tab-btn">Python</button><button class="tab-btn">Frontend + Caddy</button></div>
+    <div class="tab-panel active">
+      <div class="code"><div class="code-head"><span>backend/Dockerfile</span></div><pre><code><span class="c"># ---- stage 1: build ----</span>
+<span class="k">FROM</span> node:22-alpine <span class="k">AS</span> build
+<span class="k">WORKDIR</span> /app
+<span class="k">COPY</span> package*.json ./
+<span class="k">RUN</span> npm ci
+<span class="k">COPY</span> . .
+<span class="k">RUN</span> npm run build
+
+<span class="c"># ---- stage 2: run (only what's needed) ----</span>
+<span class="k">FROM</span> node:22-alpine
+<span class="k">WORKDIR</span> /app
+<span class="k">ENV</span> NODE_ENV=production HOST=0.0.0.0 PORT=3000
+<span class="k">COPY</span> package*.json ./
+<span class="k">RUN</span> npm ci --omit=dev
+<span class="k">COPY</span> --from=build /app/dist ./dist
+<span class="k">USER</span> node                            <span class="c"># don't run as root</span>
+<span class="k">EXPOSE</span> 3000
+<span class="k">CMD</span> ["node", "dist/index.js"]</code></pre></div>
+    </div>
+    <div class="tab-panel">
+      <div class="code"><div class="code-head"><span>backend/Dockerfile</span></div><pre><code><span class="k">FROM</span> python:3.12-slim
+<span class="k">WORKDIR</span> /app
+<span class="k">ENV</span> PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+<span class="k">COPY</span> requirements.txt .
+<span class="k">RUN</span> pip install --no-cache-dir -r requirements.txt
+<span class="k">COPY</span> . .
+<span class="k">RUN</span> useradd --create-home app
+<span class="k">USER</span> app
+<span class="k">EXPOSE</span> 3000
+<span class="k">CMD</span> ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3000", "--proxy-headers"]</code></pre></div>
+    </div>
+    <div class="tab-panel">
+      <p>Build the frontend <em>inside</em> Docker too, so the server doesn't need Node at all:</p>
+      <div class="code"><div class="code-head"><span>Dockerfile.web (repo root)</span></div><pre><code><span class="k">FROM</span> node:22-alpine <span class="k">AS</span> build
+<span class="k">WORKDIR</span> /app
+<span class="k">COPY</span> frontend/package*.json ./
+<span class="k">RUN</span> npm ci
+<span class="k">COPY</span> frontend/ .
+<span class="k">RUN</span> npm run build
+
+<span class="k">FROM</span> caddy:2
+<span class="k">COPY</span> Caddyfile /etc/caddy/Caddyfile
+<span class="k">COPY</span> --from=build /app/dist /srv</code></pre></div>
+      <p>In compose, replace the caddy service's <code>image:</code> with <code>build: { context: ., dockerfile: Dockerfile.web }</code> and remove the two bind-mount volumes for the Caddyfile and <code>/srv</code>.</p>
+    </div>
+  </div>
+
+  <h3>10.5 Health checks &amp; startup order</h3>
+  <p><code>depends_on</code> on its own only waits for the database <em>container</em> to start, not for Postgres to be ready to accept connections. Add a health check:</p>
+  <div class="code"><div class="code-head"><span>docker-compose.yml (changes)</span></div><pre><code>  <span class="k">db:</span>
+    <span class="c"># …same as before, plus:</span>
+    <span class="k">healthcheck:</span>
+      <span class="k">test:</span> [<span class="s">"CMD-SHELL"</span>, <span class="s">"pg_isready -U myapp"</span>]
+      <span class="k">interval:</span> 5s
+      <span class="k">retries:</span> 10
+
+  <span class="k">api:</span>
+    <span class="c"># …same as before, but replace depends_on with:</span>
+    <span class="k">depends_on:</span>
+      <span class="k">db:</span>
+        <span class="k">condition:</span> service_healthy</code></pre></div>
+
+  <h3>10.6 Everyday Docker commands</h3>
+  <table>
+    <tr><th>Command</th><th>What it does</th></tr>
+    <tr><td><code>git pull &amp;&amp; docker compose up -d --build</code></td><td>Deploy: rebuild changed images and replace only the containers that changed. (If you bind-mount <code>frontend/dist</code>, run the frontend build first, or use the Frontend + Caddy Dockerfile above.)</td></tr>
+    <tr><td><code>docker compose logs -f --tail=100 api</code></td><td>Follow the logs of one service</td></tr>
+    <tr><td><code>docker compose exec api sh</code></td><td>Open a shell inside a running container</td></tr>
+    <tr><td><code>docker compose exec db psql -U myapp myapp</code></td><td>Database console</td></tr>
+    <tr><td><code>docker compose exec -T db pg_dump -U myapp myapp | gzip &gt; backup.sql.gz</code></td><td>Database backup (use this in <code>backup.sh</code> with Docker)</td></tr>
+    <tr><td><code>docker compose down</code></td><td>Stop and remove containers. Volumes (your data) are kept.</td></tr>
+    <tr><td><code>docker compose down -v</code></td><td>⚠️ Also <strong>deletes volumes, including the database</strong></td></tr>
+    <tr><td><code>docker system prune -af</code></td><td>Free disk space by removing unused images</td></tr>
+  </table>
+
+  <div class="callout verify">
+    <div class="callout-title">✅ Check</div>
+    <p><code>docker compose ps</code> shows all three services as <em>running</em> (db as <em>healthy</em>). The site works over HTTPS. After <code>sudo reboot</code>, everything comes back on its own (thanks to <code>restart: unless-stopped</code>).</p>
+  </div>
+
+  <details>
+    <summary>Want a Vercel-like dashboard on your own server?</summary>
+    <p>Self-hosted platforms such as <strong>Coolify</strong>, <strong>Dokploy</strong>, <strong>CapRover</strong> and <strong>Dokku</strong> run on your VPS and give you git-push deploys, automatic HTTPS, databases and a web UI. Try them <em>after</em> working through this guide, so you know what they're doing behind the scenes.</p>
+  </details>
+</section>
+
+<!-- STEP 11 -->
+<section id="step-11">
+  <div class="step-head"><div class="step-num">11</div><h2>Monitoring &amp; upkeep</h2><label class="done-toggle"><input type="checkbox" data-step="11"> Mark done</label></div>
+  <p class="goal">Goal: find out your site is down before your users tell you, and keep the server healthy over time.</p>
+
+  <h3>11.1 A health endpoint that actually checks things</h3>
+  <p>A health check that always says "ok" can miss real problems. Have it check the database too:</p>
+  <div class="code"><div class="code-head"><span>backend</span></div><pre><code>app.get(<span class="s">"/api/health"</span>, <span class="k">async</span> (req, res) =&gt; {
+  <span class="k">try</span> {
+    <span class="k">await</span> pool.query(<span class="s">"SELECT 1"</span>);
+    res.json({ ok: <span class="k">true</span>, db: <span class="s">"up"</span>, uptime: process.uptime() });
+  } <span class="k">catch</span> (err) {
+    res.status(503).json({ ok: <span class="k">false</span>, db: <span class="s">"down"</span> });
+  }
+});</code></pre></div>
+
+  <h3>11.2 External uptime monitoring</h3>
+  <p>The monitor must run <strong>somewhere other than your server</strong>, because if the server goes down, a monitor on that server goes down with it. Free options:</p>
+  <ul>
+    <li><strong>UptimeRobot</strong> or <strong>Better Stack</strong>: add an HTTP monitor for <code>https://myapp.com/api/health</code> that checks every few minutes and alerts you by email or app notification.</li>
+    <li>Also add a monitor for <code>https://myapp.com</code> (the frontend), and turn on the <strong>SSL expiry</strong> alert.</li>
+  </ul>
+  <details>
+    <summary>Self-hosted alternative: Uptime Kuma (on a second server)</summary>
+    <div class="code"><div class="code-head"><span>a different server</span></div><pre><code>docker run -d --restart=unless-stopped --name uptime-kuma \
+  -p 127.0.0.1:3001:3001 -v uptime-kuma:/app/data louislam/uptime-kuma:1</code></pre></div>
+    <p>Then put it behind Caddy with a <code>status.example.com</code> block containing <code>reverse_proxy 127.0.0.1:3001</code>. It has a nice dashboard, public status pages, and alerts to Discord, Telegram, email and more.</p>
+  </details>
+
+  <h3>11.3 Error tracking</h3>
+  <p>Logs tell you something went wrong. Error trackers tell you <em>what</em>, <em>where</em> and <em>how often</em>, with stack traces and the user's browser. <strong>Sentry</strong> has a free tier and SDKs for both your frontend and backend. Setup takes about 10 minutes, and it's well worth it.</p>
+
+  <h3>11.4 Checking server health by hand</h3>
+  <table>
+    <tr><th>Question</th><th>Command</th></tr>
+    <tr><td>Is the CPU or RAM maxed out?</td><td><code>htop</code> (<kbd>F6</kbd> to sort, <kbd>q</kbd> to quit)</td></tr>
+    <tr><td>Running out of disk?</td><td><code>df -h</code> (worry above ~80%)</td></tr>
+    <tr><td>What's using the disk?</td><td><code>sudo ncdu /</code></td></tr>
+    <tr><td>Memory &amp; swap use</td><td><code>free -h</code></td></tr>
+    <tr><td>Were there errors in the last hour?</td><td><code>journalctl -u myapp --since "1 hour ago" -p err</code></td></tr>
+    <tr><td>Who's hitting the site? (Caddy access log)</td><td>Add <code>log</code> inside the site block, then <code>journalctl -u caddy -f</code></td></tr>
+    <tr><td>Did the server reboot?</td><td><code>uptime</code>, <code>last reboot</code></td></tr>
+  </table>
+
+  <h3>11.5 Monthly maintenance routine (~10 minutes)</h3>
+  <ul class="checklist">
+    <li><input type="checkbox"><span>Take a provider snapshot first (one click), so you have something to go back to if an upgrade goes wrong</span></li>
+    <li><input type="checkbox"><span><code>sudo apt update &amp;&amp; sudo apt upgrade -y</code></span></li>
+    <li><input type="checkbox"><span>If <code>/var/run/reboot-required</code> exists: <code>sudo reboot</code> (at a quiet time)</span></li>
+    <li><input type="checkbox"><span>Check <code>df -h</code> and that the backups in <code>~/backups</code> and R2 are recent</span></li>
+    <li><input type="checkbox"><span><code>npm audit</code> / <code>pip-audit</code> on your app; update vulnerable dependencies</span></li>
+    <li><input type="checkbox"><span>With Docker: <code>docker compose pull &amp;&amp; docker compose up -d</code>, then <code>docker system prune -f</code></span></li>
+    <li><input type="checkbox"><span>Glance at <code>sudo fail2ban-client status sshd</code> and your error tracker</span></li>
+  </ul>
+
+  <div class="callout verify">
+    <div class="callout-title">✅ Check</div>
+    <p>Stop your app (<code>sudo systemctl stop myapp</code>). Within a few minutes you should get a "down" alert. Start it again and you should get a "recovered" alert.</p>
+  </div>
+</section>
+
+<!-- STEP 12 -->
+<section id="step-12">
+  <div class="step-head"><div class="step-num">12</div><h2>More apps &amp; a staging site</h2><label class="done-toggle"><input type="checkbox" data-step="12"> Mark done</label></div>
+  <p class="goal">Goal: run several projects on one server, plus a private staging copy for testing before production.</p>
+
+  <h3>12.1 One server, many apps</h3>
+  <p>A $5 server can easily run several small projects. The pattern is: <strong>each app gets its own port, its own systemd service, its own database, and its own block in the Caddyfile</strong>.</p>
+  <table>
+    <tr><th>App</th><th>Domain</th><th>Port</th><th>Service</th><th>Database</th></tr>
+    <tr><td>Main app</td><td>myapp.com</td><td>3000</td><td>myapp.service</td><td>myapp</td></tr>
+    <tr><td>Staging</td><td>staging.myapp.com</td><td>3100</td><td>myapp-staging.service</td><td>myapp_staging</td></tr>
+    <tr><td>Side project</td><td>coolthing.dev</td><td>3200</td><td>coolthing.service</td><td>coolthing</td></tr>
+  </table>
+  <p>Keep a table like this in a note. You'll forget which port is which.</p>
+  <div class="code"><div class="code-head"><span>/etc/caddy/Caddyfile</span></div><pre><code>myapp.com, www.myapp.com {
+    handle /api/* {
+        reverse_proxy 127.0.0.1:3000
+    }
+    handle {
+        root * /var/www/myapp
+        try_files {path} /index.html
+        file_server
+    }
+}
+
+staging.myapp.com {
+    basic_auth {
+        <span class="c"># generate with: caddy hash-password</span>
+        tester $2a$14$REPLACE_WITH_HASH_FROM_CADDY_HASH_PASSWORD
+    }
+    handle /api/* {
+        reverse_proxy 127.0.0.1:3100
+    }
+    handle {
+        root * /var/www/myapp-staging
+        try_files {path} /index.html
+        file_server
+    }
+}
+
+coolthing.dev {
+    reverse_proxy 127.0.0.1:3200
+}</code></pre></div>
+
+  <h3>12.2 Setting up staging</h3>
+  <ol>
+    <li>DNS: add an <code>A</code> record for <code>staging</code> → your server IP.</li>
+    <li>Clone the repo a second time: <code>git clone … ~/app-staging</code>, and check out a <code>staging</code> branch.</li>
+    <li>Create a separate database (<code>CREATE DATABASE myapp_staging OWNER myapp;</code>) and a separate <code>.env</code> with <code>PORT=3100</code> and the staging <code>DATABASE_URL</code>.</li>
+    <li>Copy the unit file to <code>myapp-staging.service</code>, change the paths, then <code>enable --now</code> it.</li>
+    <li>Add the Caddy block above. Run <code>caddy hash-password</code> to create the password hash, then reload Caddy.</li>
+    <li>Add a second GitHub workflow that deploys the <code>staging</code> branch to the staging folders.</li>
+  </ol>
+  <div class="callout tip">
+    <div class="callout-title">💡 How you'll work from now on</div>
+    <p>Feature branch → merge to <code>staging</code> → it auto-deploys to staging.myapp.com → click around and test → merge to <code>main</code> → it auto-deploys to production. This is roughly what Vercel's preview deployments give you, set up yourself.</p>
+  </div>
+
+  <div class="callout warn">
+    <div class="callout-title">⚠️ Don't let staging take down production</div>
+    <p>Both share the same CPU and RAM. A runaway staging process can slow production down. You can limit it by adding <code>MemoryMax=300M</code> and <code>CPUQuota=50%</code> to the staging unit's <code>[Service]</code> section.</p>
+  </div>
+
+  <div class="callout verify">
+    <div class="callout-title">✅ Check</div>
+    <p><code>https://staging.myapp.com</code> asks for a password and then shows the staging build. Production at <code>https://myapp.com</code> is unaffected.</p>
+  </div>
+</section>
+
+<!-- ================= PART 2: AWS ================= -->
+<div class="part-label">Part 2</div>
+<section id="aws">
+  <h2 style="margin-top:10px;border:none">Hosting on AWS</h2>
+  <p>AWS gives you a separate managed service for each piece from Part 1. The simplest AWS setup is just <strong>Part 1 on an EC2 or Lightsail instance</strong>. When you're ready, swap pieces for managed ones:</p>
+
+  <table>
+    <tr><th>Piece</th><th>Simple (Part 1 on AWS)</th><th>Managed / "cloud native"</th></tr>
+    <tr><td>Server</td><td>EC2 or Lightsail</td><td>ECS Fargate, App Runner, or Lambda</td></tr>
+    <tr><td>Frontend</td><td>Caddy on the instance</td><td><strong>S3 + CloudFront</strong> (global CDN)</td></tr>
+    <tr><td>HTTPS</td><td>Caddy / Certbot</td><td>ACM certificate on CloudFront or a Load Balancer</td></tr>
+    <tr><td>DNS</td><td>Any DNS provider</td><td>Route 53</td></tr>
+    <tr><td>Database</td><td>Postgres on the instance</td><td>RDS for PostgreSQL</td></tr>
+    <tr><td>Secrets</td><td><code>.env</code> file</td><td>SSM Parameter Store / Secrets Manager</td></tr>
+    <tr><td>Logs</td><td><code>journalctl</code></td><td>CloudWatch Logs</td></tr>
+  </table>
+
+  <div class="callout danger">
+    <div class="callout-title">🚨 Do this first: set a budget alert</div>
+    <p>Billing → <strong>Budgets</strong> → create a monthly budget (e.g. $10) with an email alert. Watch out for <strong>NAT Gateways</strong> (~$32/mo each), <strong>Load Balancers</strong> (~$16+/mo), <strong>RDS</strong>, and public IPv4 addresses (~$3.60/mo each). These are behind most "surprise AWS bill" stories. Also turn on <strong>MFA</strong> for the root account and use an IAM user or IAM Identity Center for day-to-day work.</p>
+  </div>
+
+  <h3>EC2 quick start (to follow Part 1)</h3>
+  <ol>
+    <li>EC2 → <em>Launch instance</em> → Ubuntu 24.04 → t4g.small (ARM, cheap) or t3.micro.</li>
+    <li>Create a key pair and download the <code>.pem</code> file (<code>chmod 400 my-key.pem</code>).</li>
+    <li>Security group: allow SSH (22) from <em>My IP</em>, HTTP (80) and HTTPS (443) from anywhere.</li>
+    <li>Storage: 20–30 GB gp3.</li>
+    <li>After launch: <em>Elastic IPs → Allocate → Associate</em> with the instance, so the IP doesn't change when you restart it.</li>
+    <li>Log in with <code>ssh -i my-key.pem ubuntu@ELASTIC_IP</code> and continue from <a href="#step-2">step 2</a>.</li>
+  </ol>
+</section>
+
+<section id="aws-account">
+  <h3 style="font-size:24px;margin-top:48px">Account &amp; CLI setup (do this once)</h3>
+  <ol>
+    <li><strong>Secure the root user:</strong> sign in with your account email → top right → <em>Security credentials</em> → assign an <strong>MFA device</strong>. After that, avoid using root for daily work.</li>
+    <li><strong>Create your everyday login:</strong> open <em>IAM Identity Center</em> → enable it → create a user for yourself → give it the <code>AdministratorAccess</code> permission set on your account. You get a personal sign-in URL. (The older approach is an IAM user with access keys. It works, but long-lived keys are easier to leak.)</li>
+    <li><strong>Pick one region</strong> (e.g. <code>us-east-1</code> or <code>eu-central-1</code>) and use it for everything. Resources in a different region don't show up in the console, which leads to "where did my server go?" moments.</li>
+    <li><strong>Install the AWS CLI</strong> on your computer and log in:</li>
+  </ol>
+  <div class="code"><div class="code-head"><span>your computer</span></div><pre><code><span class="c"># install: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html</span>
+aws configure sso          <span class="c"># paste your Identity Center start URL, pick account + role</span>
+aws sso login
+aws sts get-caller-identity   <span class="c"># prints your account ID, so you know it works</span></code></pre></div>
+  <div class="callout warn">
+    <div class="callout-title">⚠️ Free tier ≠ free</div>
+    <p>Recent AWS accounts get credits or a time-limited free plan rather than "free forever". Check <em>Billing → Free tier</em> to see what applies to you. Stop or delete anything you're no longer using. A stopped EC2 instance still bills for its disk and Elastic IP.</p>
+  </div>
+</section>
+
+<section id="aws-s3">
+  <h3 style="font-size:24px;margin-top:48px">Frontend on S3 + CloudFront</h3>
+  <p>S3 stores the files and CloudFront serves them from hundreds of locations worldwide. It costs pennies, never goes down, and needs no server.</p>
+  <ol>
+    <li><strong>S3:</strong> create a bucket (e.g. <code>myapp-frontend</code>). Keep "Block all public access" <strong>on</strong>.</li>
+    <li><strong>ACM:</strong> switch the region to <strong>us-east-1</strong> (CloudFront requires certificates from there). Request a public certificate for <code>myapp.com</code> and <code>www.myapp.com</code>, validate it via DNS, and wait until it shows "Issued".</li>
+    <li><strong>CloudFront:</strong> create a distribution:
+      <ul>
+        <li>Origin: your S3 bucket, with <strong>Origin Access Control (OAC)</strong>. Let it update the bucket policy for you.</li>
+        <li>Viewer protocol: <em>Redirect HTTP to HTTPS</em></li>
+        <li>Default root object: <code>index.html</code></li>
+        <li>Alternate domain names: <code>myapp.com</code>, <code>www.myapp.com</code>, plus the ACM certificate</li>
+      </ul>
+    </li>
+    <li><strong>SPA routing:</strong> Error pages → create custom responses for <code>403</code> and <code>404</code> → response page <code>/index.html</code>, code <code>200</code>.</li>
+    <li><strong>DNS:</strong> point your domain to the CloudFront domain (<code>dxxxx.cloudfront.net</code>): an <em>Alias A</em> record in Route 53, or a <code>CNAME</code> elsewhere (Cloudflare can flatten one at the bare domain).</li>
+  </ol>
+
+  <p>Deploying (install the AWS CLI and run <code>aws configure</code> first):</p>
+  <div class="code"><div class="code-head"><span>your computer or CI</span></div><pre><code>npm run build
+
+<span class="c"># hashed assets: cache forever</span>
+aws s3 sync dist/ s3://myapp-frontend --delete \
+  --exclude index.html --cache-control "public,max-age=31536000,immutable"
+
+<span class="c"># index.html: never cache, so users always get the newest version</span>
+aws s3 cp dist/index.html s3://myapp-frontend/index.html --cache-control "no-cache"
+
+aws cloudfront create-invalidation --distribution-id YOUR_DIST_ID --paths "/index.html"</code></pre></div>
+
+  <div class="callout tip">
+    <div class="callout-title">💡 Connecting the API</div>
+    <p>Option 1: host the API on <code>api.myapp.com</code> (an EC2 instance running Caddy) and enable CORS for <code>https://myapp.com</code>. Option 2 (no CORS): add the API server as a <strong>second origin</strong> in CloudFront with a behavior for <code>/api/*</code> and caching disabled.</p>
+  </div>
+
+  <h4>Detailed: CloudFront behavior for /api/* (option 2)</h4>
+  <ol>
+    <li>CloudFront → your distribution → <em>Origins → Create origin</em> → domain: <code>api.myapp.com</code> (your EC2 instance with Caddy and HTTPS), protocol <em>HTTPS only</em>.</li>
+    <li><em>Behaviors → Create behavior</em> → path pattern <code>/api/*</code> → that origin.</li>
+    <li>Allowed methods: <em>GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE</em>.</li>
+    <li>Cache policy: <strong>CachingDisabled</strong>. Origin request policy: <strong>AllViewerExceptHostHeader</strong> (passes cookies, query strings and headers through).</li>
+  </ol>
+  <p>Your frontend at <code>https://myapp.com</code> can now call <code>/api/...</code> directly. One domain, no CORS.</p>
+</section>
+
+<section id="aws-gha">
+  <h3 style="font-size:24px;margin-top:48px">Auto-deploy the frontend to S3 with GitHub Actions (OIDC)</h3>
+  <p>With <strong>OIDC</strong>, GitHub gets temporary AWS credentials for each run, so you never store long-lived AWS keys in GitHub secrets.</p>
+  <ol>
+    <li>IAM → <em>Identity providers → Add provider</em> → OpenID Connect → URL <code>https://token.actions.githubusercontent.com</code>, audience <code>sts.amazonaws.com</code>.</li>
+    <li>IAM → <em>Roles → Create role</em> → <em>Web identity</em> → choose that provider → audience <code>sts.amazonaws.com</code> → GitHub organization/user <code>you</code>, repository <code>your-app</code>, branch <code>main</code>. Name it <code>github-deploy-frontend</code>.</li>
+    <li>Attach an inline policy that only allows what the deploy needs:</li>
+  </ol>
+  <div class="code"><div class="code-head"><span>IAM inline policy (JSON)</span></div><pre><code>{
+  <span class="s">"Version"</span>: <span class="s">"2012-10-17"</span>,
+  <span class="s">"Statement"</span>: [
+    { <span class="s">"Effect"</span>: <span class="s">"Allow"</span>,
+      <span class="s">"Action"</span>: [<span class="s">"s3:ListBucket"</span>],
+      <span class="s">"Resource"</span>: <span class="s">"arn:aws:s3:::myapp-frontend"</span> },
+    { <span class="s">"Effect"</span>: <span class="s">"Allow"</span>,
+      <span class="s">"Action"</span>: [<span class="s">"s3:PutObject"</span>, <span class="s">"s3:DeleteObject"</span>, <span class="s">"s3:GetObject"</span>],
+      <span class="s">"Resource"</span>: <span class="s">"arn:aws:s3:::myapp-frontend/*"</span> },
+    { <span class="s">"Effect"</span>: <span class="s">"Allow"</span>,
+      <span class="s">"Action"</span>: [<span class="s">"cloudfront:CreateInvalidation"</span>],
+      <span class="s">"Resource"</span>: <span class="s">"arn:aws:cloudfront::123456789012:distribution/YOUR_DIST_ID"</span> }
+  ]
+}</code></pre></div>
+  <div class="code"><div class="code-head"><span>.github/workflows/frontend-s3.yml</span></div><pre><code><span class="k">name:</span> Deploy frontend to S3
+<span class="k">on:</span>
+  <span class="k">push:</span>
+    <span class="k">branches:</span> [main]
+    <span class="k">paths:</span> [<span class="s">"frontend/**"</span>]          <span class="c"># only when the frontend changes</span>
+
+<span class="k">permissions:</span>
+  <span class="k">id-token:</span> write                    <span class="c"># required for OIDC</span>
+  <span class="k">contents:</span> read
+
+<span class="k">jobs:</span>
+  <span class="k">deploy:</span>
+    <span class="k">runs-on:</span> ubuntu-latest
+    <span class="k">steps:</span>
+      - <span class="k">uses:</span> actions/checkout@v4
+      - <span class="k">uses:</span> actions/setup-node@v4
+        <span class="k">with:</span>
+          <span class="k">node-version:</span> 22
+      - <span class="k">working-directory:</span> frontend
+        <span class="k">run:</span> npm ci &amp;&amp; npm run build
+
+      - <span class="k">uses:</span> aws-actions/configure-aws-credentials@v4
+        <span class="k">with:</span>
+          <span class="k">role-to-assume:</span> arn:aws:iam::123456789012:role/github-deploy-frontend
+          <span class="k">aws-region:</span> us-east-1
+
+      - <span class="k">name:</span> Upload &amp; invalidate
+        <span class="k">run:</span> |
+          aws s3 sync frontend/dist/ s3://myapp-frontend --delete \
+            --exclude index.html --cache-control "public,max-age=31536000,immutable"
+          aws s3 cp frontend/dist/index.html s3://myapp-frontend/index.html --cache-control "no-cache"
+          aws cloudfront create-invalidation --distribution-id ${{ secrets.CF_DIST_ID }} --paths "/index.html"</code></pre></div>
+</section>
+
+<section id="aws-backend">
+  <h3 style="font-size:24px;margin-top:48px">Backend options on AWS</h3>
+  <div class="cards">
+    <div class="card"><span class="badge">Easiest</span><h4>EC2 / Lightsail</h4><p>Exactly Part 1. Full control, predictable cost. You handle OS updates.</p></div>
+    <div class="card"><span class="badge">Containers, no servers</span><h4>ECS on Fargate</h4><p>Push your Docker image to ECR, define a task and service, and put an Application Load Balancer in front. Scales well, but there are more parts to set up.</p></div>
+    <div class="card"><span class="badge">Simple containers</span><h4>App Runner</h4><p>Give it a container image or repo and it handles HTTPS and scaling. The closest AWS gets to Render or Heroku.</p></div>
+    <div class="card"><span class="badge">Serverless</span><h4>Lambda + API Gateway</h4><p>Pay per request, so it's nearly free at low traffic. Cold starts happen, and long-running work and websockets are harder.</p></div>
+  </div>
+  <p><strong>Database:</strong> RDS PostgreSQL (a <code>db.t4g.micro</code> is the cheapest option; check what your account's free tier or credits cover). Full walkthrough: <a href="#aws-rds">Database on RDS</a>. Put RDS in a <strong>private subnet</strong>, and allow port 5432 only from your app's security group, never from <code>0.0.0.0/0</code>.</p>
+  <div class="callout info">
+    <div class="callout-title">ℹ️ Once you're clicking through the console a lot</div>
+    <p>Learn <strong>infrastructure as code</strong>: Terraform/OpenTofu, AWS CDK, or SST. You describe all of these resources in code, review changes, and can rebuild everything from scratch.</p>
+  </div>
+</section>
+
+<section id="aws-rds">
+  <h3 style="font-size:24px;margin-top:48px">Database on RDS, step by step</h3>
+  <ol>
+    <li>RDS → <em>Create database</em> → <strong>Standard create</strong> → PostgreSQL → latest version.</li>
+    <li>Template: <strong>Free tier</strong> or <strong>Dev/Test</strong>. Single-AZ (Multi-AZ doubles the cost; use it for serious production).</li>
+    <li>Instance: <code>db.t4g.micro</code>. Storage: 20 GB gp3. <strong>Turn off storage autoscaling</strong> while you're learning.</li>
+    <li>Credentials: master username <code>postgres</code>, and let RDS manage the password in <strong>Secrets Manager</strong> (or set your own).</li>
+    <li>Connectivity: <em>Connect to an EC2 compute resource</em> → pick your EC2 instance. AWS then creates matching security groups so <strong>only</strong> that instance can reach port 5432. <strong>Public access: No.</strong></li>
+    <li>Additional config: initial database name <code>myapp</code>. Automated backups on, 7 days retention.</li>
+  </ol>
+  <p>Once it's "Available", copy the <strong>endpoint</strong> and test it from your EC2 instance:</p>
+  <div class="code"><div class="code-head"><span>EC2 instance</span></div><pre><code>sudo apt install -y postgresql-client
+psql "postgres://postgres:PASSWORD@myapp.xxxxx.us-east-1.rds.amazonaws.com:5432/myapp?sslmode=require" -c 'select version();'</code></pre></div>
+  <p>Put that URL in your <code>.env</code> as <code>DATABASE_URL</code>. RDS handles backups, minor-version patching and point-in-time restore. You can skip the <code>backup.sh</code> from step 8 (although an occasional off-AWS dump is still a good idea).</p>
+  <div class="callout tip">
+    <div class="callout-title">💡 Reach RDS from your laptop</div>
+    <p>Since RDS isn't public, tunnel through EC2: <code>ssh -L 5433:YOUR_RDS_ENDPOINT:5432 myapp</code>, then connect your GUI to <code>localhost:5433</code>.</p>
+  </div>
+</section>
+
+<section id="aws-ecs">
+  <h3 style="font-size:24px;margin-top:48px">Containers on ECS Fargate (the "no servers" path)</h3>
+  <p>Once your backend has a Dockerfile (step 10), AWS can run it without you managing any servers. The pieces:</p>
+  <table>
+    <tr><th>Piece</th><th>What it is</th></tr>
+    <tr><td><strong>ECR</strong></td><td>A private registry where your Docker images live</td></tr>
+    <tr><td><strong>Task definition</strong></td><td>"Run this image with 0.25 vCPU, 512 MB, port 3000, these env vars/secrets"</td></tr>
+    <tr><td><strong>Service</strong></td><td>"Keep N copies of that task running, replace any that die, roll out new versions gradually"</td></tr>
+    <tr><td><strong>Cluster</strong></td><td>A logical grouping of services (free; Fargate supplies the machines)</td></tr>
+    <tr><td><strong>Application Load Balancer</strong></td><td>Public HTTPS entry point (ACM certificate) that spreads traffic across tasks and checks <code>/api/health</code></td></tr>
+  </table>
+
+  <h4>1. Push your image to ECR</h4>
+  <div class="code"><div class="code-head"><span>your computer</span></div><pre><code>ACCOUNT=123456789012; REGION=us-east-1
+REPO=$ACCOUNT.dkr.ecr.$REGION.amazonaws.com/myapp-api
+
+aws ecr create-repository --repository-name myapp-api
+aws ecr get-login-password --region $REGION | \
+  docker login --username AWS --password-stdin $ACCOUNT.dkr.ecr.$REGION.amazonaws.com
+
+<span class="c"># --platform matters if you're on an Apple Silicon / ARM machine</span>
+docker build --platform linux/amd64 -t $REPO:v1 ./backend
+docker push $REPO:v1</code></pre></div>
+
+  <h4>2. Create everything in the console</h4>
+  <ol>
+    <li><strong>Secrets:</strong> Secrets Manager → store <code>DATABASE_URL</code> and <code>JWT_SECRET</code>.</li>
+    <li><strong>ECS → Clusters → Create</strong> → name <code>myapp</code> → infrastructure: <em>AWS Fargate</em>.</li>
+    <li><strong>Task definitions → Create</strong> → Fargate, Linux/X86_64, 0.25 vCPU / 0.5 GB → container: image URI <code>…/myapp-api:v1</code>, port 3000 → environment: add your secrets as <em>ValueFrom</em> with the secret ARNs → log collection to CloudWatch (on by default).</li>
+    <li><strong>Cluster → Services → Create</strong> → that task definition → desired tasks <code>1</code> (2 for redundancy) → Networking: default VPC, public subnets, <em>public IP on</em> (avoids paying for a NAT Gateway) → Load balancing: <em>Create new ALB</em>, listener <strong>HTTPS 443</strong> with your ACM certificate, health check path <code>/api/health</code>.</li>
+    <li><strong>DNS:</strong> point <code>api.myapp.com</code> at the ALB's DNS name (Route 53 Alias or CNAME).</li>
+    <li><strong>Security groups:</strong> the ALB allows 443 from anywhere; the tasks allow 3000 <em>only from the ALB's security group</em>; RDS allows 5432 only from the tasks' security group.</li>
+  </ol>
+
+  <h4>3. Deploy a new version</h4>
+  <div class="code"><div class="code-head"><span>your computer or CI</span></div><pre><code>docker build --platform linux/amd64 -t $REPO:v2 ./backend &amp;&amp; docker push $REPO:v2
+<span class="c"># create a new task definition revision pointing at :v2 (console or CLI), then:</span>
+aws ecs update-service --cluster myapp --service myapp-api --task-definition myapp-api --force-new-deployment</code></pre></div>
+  <p>ECS starts new tasks, waits until they pass the health check, moves traffic over, and then stops the old ones. That's a zero-downtime rolling deploy.</p>
+  <div class="callout warn">
+    <div class="callout-title">⚠️ What this costs</div>
+    <p>A small Fargate task is ~$9/mo, the ALB ~$16–20/mo, RDS micro ~$12–15/mo after the free tier, plus public IPv4 charges. That's roughly <strong>$40–60/mo</strong>, versus ~$5–10 for a single VPS. You're paying for automatic recovery, scaling and less maintenance. It's worth it when you need those, overkill for a side project.</p>
+  </div>
+</section>
+
+<!-- ================= PART 3: CLOUDFLARE ================= -->
+<div class="part-label">Part 3</div>
+<section id="cf">
+  <h2 style="margin-top:10px;border:none">Hosting on Cloudflare</h2>
+  <p>Cloudflare runs on a huge edge network and has a very generous free tier. It's excellent for frontends. For backends there are two approaches: write your backend specifically for <strong>Workers</strong>, or keep it on your VPS and put Cloudflare in front of it.</p>
+  <div class="callout tip">
+    <div class="callout-title">💡 A popular, cheap and solid setup</div>
+    <p><strong>Frontend → Cloudflare Pages</strong> (free) · <strong>Backend + DB → your $5 VPS</strong> (Part 1) · <strong>DNS → Cloudflare</strong>.</p>
+  </div>
+</section>
+
+<section id="cf-pages">
+  <h3 style="font-size:24px;margin-top:48px">Frontend on Cloudflare Pages</h3>
+  <ol>
+    <li>Cloudflare dashboard → <em>Workers &amp; Pages → Create → Pages → Connect to Git</em>.</li>
+    <li>Pick your repo. Set the <strong>root directory</strong> (e.g. <code>frontend</code>), <strong>build command</strong> <code>npm run build</code> and <strong>output directory</strong> <code>dist</code>.</li>
+    <li>Add build-time environment variables, e.g. <code>VITE_API_URL=https://api.myapp.com</code>.</li>
+    <li><em>Custom domains</em> → add <code>myapp.com</code>.</li>
+  </ol>
+  <p>Every push to <code>main</code> deploys to production, and every other branch gets a preview URL, just like Vercel. Single-page apps work out of the box (Pages serves <code>index.html</code> for unknown routes when there's no <code>404.html</code>).</p>
+  <p>Or deploy from the command line: <code>npx wrangler pages deploy dist --project-name myapp</code></p>
+  <div class="callout info">
+    <div class="callout-title">ℹ️ Pages vs Workers static assets</div>
+    <p>Cloudflare now also lets a <em>Worker</em> serve your static frontend (the "static assets" feature), so the frontend and API can live in one Worker project. Cloudflare is steering new projects towards that, but Pages is still supported and is the simplest way to start. The concepts on this page apply to both.</p>
+  </div>
+</section>
+
+<section id="cf-split">
+  <h3 style="font-size:24px;margin-top:48px">Pages frontend + API on your VPS (CORS &amp; cookies)</h3>
+  <p>With the frontend on <code>myapp.com</code> (Pages) and the API on <code>api.myapp.com</code> (your VPS, using the Caddy subdomain block from step 7), the browser treats them as <strong>different origins</strong>. Your API has to explicitly allow requests from the frontend's origin:</p>
+  <div class="code"><div class="code-head"><span>backend: npm install cors</span></div><pre><code><span class="k">import</span> cors <span class="k">from</span> <span class="s">"cors"</span>;
+
+app.use(cors({
+  origin: [<span class="s">"https://myapp.com"</span>, <span class="s">"https://www.myapp.com"</span>],
+  credentials: <span class="k">true</span>,          <span class="c">// only if you use cookies</span>
+}));</code></pre></div>
+  <div class="code"><div class="code-head"><span>frontend</span></div><pre><code><span class="k">const</span> API = import.meta.env.VITE_API_URL;          <span class="c">// "https://api.myapp.com" in Pages env vars</span>
+<span class="k">const</span> res = <span class="k">await</span> fetch(<span class="s">`${API}/api/me`</span>, { credentials: <span class="s">"include"</span> });</code></pre></div>
+  <h4>Cookies across subdomains</h4>
+  <p><code>myapp.com</code> and <code>api.myapp.com</code> are <em>same-site</em> (same registrable domain), so cookies work with <code>SameSite=Lax</code>. Set them like this:</p>
+  <div class="code"><div class="code-head"><span>backend</span></div><pre><code>res.cookie(<span class="s">"session"</span>, token, {
+  httpOnly: <span class="k">true</span>,       <span class="c">// JS can't read it (XSS protection)</span>
+  secure: <span class="k">true</span>,         <span class="c">// HTTPS only</span>
+  sameSite: <span class="s">"lax"</span>,
+  domain: <span class="s">".myapp.com"</span>,  <span class="c">// shared by myapp.com and api.myapp.com</span>
+  maxAge: 7 * 24 * 3600 * 1000,
+});</code></pre></div>
+  <div class="callout warn">
+    <div class="callout-title">⚠️ Don't use the *.pages.dev URL with cookies</div>
+    <p><code>myapp.pages.dev</code> and <code>api.myapp.com</code> are <em>different sites</em>, and browsers increasingly block third-party cookies. Always use your custom domain for the frontend.</p>
+  </div>
+</section>
+
+<section id="cf-workers">
+  <h3 style="font-size:24px;margin-top:48px">Backend on Cloudflare Workers</h3>
+  <p>Workers run your JavaScript/TypeScript at the edge. They aren't a regular Node server, so an Express app won't run on them unchanged. <strong>Hono</strong> is the usual framework for Workers:</p>
+  <div class="code"><div class="code-head"><span>your computer</span></div><pre><code>npm create hono@latest my-api       <span class="c"># choose the "cloudflare-workers" template</span>
+cd my-api</code></pre></div>
+  <div class="code"><div class="code-head"><span>src/index.ts</span></div><pre><code><span class="k">import</span> { Hono } <span class="k">from</span> <span class="s">"hono"</span>;
+
+<span class="k">const</span> app = <span class="k">new</span> Hono();
+
+app.get(<span class="s">"/api/health"</span>, (c) =&gt; c.json({ ok: <span class="k">true</span> }));
+app.get(<span class="s">"/api/hello/:name"</span>, (c) =&gt; c.json({ msg: <span class="s">`Hi ${c.req.param("name")}`</span> }));
+
+<span class="k">export default</span> app;</code></pre></div>
+  <div class="code"><div class="code-head"><span>your computer</span></div><pre><code>npx wrangler login
+npm run dev                          <span class="c"># local dev server</span>
+npx wrangler deploy                  <span class="c"># live at https://my-api.YOUR-SUBDOMAIN.workers.dev</span>
+npx wrangler secret put JWT_SECRET   <span class="c"># secrets</span></code></pre></div>
+  <p>Storage that works with Workers: <strong>D1</strong> (SQLite), <strong>KV</strong> (key-value), <strong>R2</strong> (file storage, S3-compatible, no egress fees), <strong>Durable Objects</strong> (state and websockets), and <strong>Hyperdrive</strong> to connect to an existing Postgres.</p>
+
+  <h4>Give the Worker your own domain</h4>
+  <div class="code"><div class="code-head"><span>wrangler.toml (add)</span></div><pre><code><span class="k">routes</span> = [
+  { pattern = <span class="s">"api.myapp.com"</span>, custom_domain = <span class="k">true</span> }
+]</code></pre></div>
+  <p>Run <code>npx wrangler deploy</code> again. Cloudflare creates the DNS record and certificate for you (the domain must be on Cloudflare DNS). Then allow your frontend's origin with Hono's CORS middleware:</p>
+  <div class="code"><div class="code-head"><span>src/index.ts</span></div><pre><code><span class="k">import</span> { cors } <span class="k">from</span> <span class="s">"hono/cors"</span>;
+app.use(<span class="s">"/api/*"</span>, cors({ origin: <span class="s">"https://myapp.com"</span>, credentials: <span class="k">true</span> }));</code></pre></div>
+
+  <h4>Things that work differently on Workers</h4>
+  <ul>
+    <li>There's no filesystem and no long-running process. Each request runs briefly, and in-memory variables don't persist between requests.</li>
+    <li>Environment variables and secrets come from <code>c.env</code>, not <code>process.env</code> (unless you enable Node compatibility).</li>
+    <li>Many npm packages work, especially with <code>compatibility_flags = ["nodejs_compat"]</code>. Native modules (e.g. <code>bcrypt</code>, <code>sharp</code>) don't. Use alternatives like <code>bcryptjs</code> or the Web Crypto API.</li>
+    <li>CPU time per request is limited (generous for normal API work; not suited to video encoding).</li>
+  </ul>
+</section>
+
+<section id="cf-d1">
+  <h3 style="font-size:24px;margin-top:48px">Database with D1 (SQLite at the edge)</h3>
+  <div class="code"><div class="code-head"><span>your computer (in my-api/)</span></div><pre><code>npx wrangler d1 create myapp-db
+<span class="c"># prints a database_id: copy it into wrangler.toml below</span></code></pre></div>
+  <div class="code"><div class="code-head"><span>wrangler.toml (add)</span></div><pre><code>[[d1_databases]]
+<span class="k">binding</span>       = <span class="s">"DB"</span>            <span class="c"># becomes c.env.DB in your code</span>
+<span class="k">database_name</span> = <span class="s">"myapp-db"</span>
+<span class="k">database_id</span>   = <span class="s">"paste-the-id-here"</span></code></pre></div>
+  <div class="code"><div class="code-head"><span>schema.sql</span></div><pre><code><span class="k">CREATE TABLE IF NOT EXISTS</span> notes (
+  id         <span class="k">INTEGER PRIMARY KEY AUTOINCREMENT</span>,
+  text       <span class="k">TEXT NOT NULL</span>,
+  created_at <span class="k">TEXT DEFAULT</span> (datetime(<span class="s">'now'</span>))
+);</code></pre></div>
+  <div class="code"><div class="code-head"><span>your computer</span></div><pre><code>npx wrangler d1 execute myapp-db --local  --file=./schema.sql   <span class="c"># local dev copy</span>
+npx wrangler d1 execute myapp-db --remote --file=./schema.sql   <span class="c"># real database</span></code></pre></div>
+  <div class="code"><div class="code-head"><span>src/index.ts</span></div><pre><code><span class="k">import</span> { Hono } <span class="k">from</span> <span class="s">"hono"</span>;
+
+<span class="k">type</span> Bindings = { DB: D1Database };
+<span class="k">const</span> app = <span class="k">new</span> Hono&lt;{ Bindings: Bindings }&gt;();
+
+app.get(<span class="s">"/api/notes"</span>, <span class="k">async</span> (c) =&gt; {
+  <span class="k">const</span> { results } = <span class="k">await</span> c.env.DB
+    .prepare(<span class="s">"SELECT * FROM notes ORDER BY id DESC LIMIT 50"</span>)
+    .all();
+  <span class="k">return</span> c.json(results);
+});
+
+app.post(<span class="s">"/api/notes"</span>, <span class="k">async</span> (c) =&gt; {
+  <span class="k">const</span> { text } = <span class="k">await</span> c.req.json();
+  <span class="k">if</span> (!text) <span class="k">return</span> c.json({ error: <span class="s">"text required"</span> }, 400);
+  <span class="k">await</span> c.env.DB.prepare(<span class="s">"INSERT INTO notes (text) VALUES (?)"</span>).bind(text).run();
+  <span class="k">return</span> c.json({ ok: <span class="k">true</span> }, 201);
+});
+
+<span class="k">export default</span> app;</code></pre></div>
+  <p>Test it with <code>npm run dev</code>, then <code>npx wrangler deploy</code>. D1 includes <strong>Time Travel</strong> (point-in-time restore over recent days). For extra safety, run <code>npx wrangler d1 export myapp-db --remote --output=backup.sql</code> now and then.</p>
+</section>
+
+<section id="cf-proxy">
+  <h3 style="font-size:24px;margin-top:48px">Putting Cloudflare in front of your VPS (orange cloud)</h3>
+  <p>When you switch a DNS record to <strong>Proxied</strong>, visitors connect to Cloudflare, and Cloudflare connects to your server. You get a CDN for static files, DDoS protection, and your server's real IP is hidden.</p>
+  <ol>
+    <li>Make sure the site already works with HTTPS on the grey cloud (Caddy has its certificate).</li>
+    <li>SSL/TLS → Overview → mode <strong>Full (strict)</strong>. <em>Flexible</em> causes redirect loops with Caddy; <em>Full</em> without strict doesn't verify your certificate.</li>
+    <li>Switch the <code>A</code> records to the orange cloud.</li>
+    <li>SSL/TLS → Edge Certificates → turn on <strong>Always Use HTTPS</strong>.</li>
+    <li>Caching → Cache Rules: add a rule to <em>bypass cache</em> for <code>URI Path starts with /api/</code>, so API responses never get cached.</li>
+  </ol>
+  <h4>Getting the real visitor IP</h4>
+  <p>Behind the proxy, every request appears to come from a Cloudflare IP. Cloudflare sends the real one in the <code>CF-Connecting-IP</code> header. Tell Caddy to trust Cloudflare's IP ranges (in the global options block at the very top of the Caddyfile):</p>
+  <div class="code"><div class="code-head"><span>Caddyfile (top)</span></div><pre><code>{
+    servers {
+        trusted_proxies static 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22
+        client_ip_headers CF-Connecting-IP X-Forwarded-For
+    }
+}</code></pre></div>
+  <p class="goal" style="font-size:14px">(Only the IPv4 ranges are shown. Add the IPv6 ranges too if your server has IPv6. The current lists are published at cloudflare.com/ips, and there's also a Caddy plugin that keeps them up to date automatically.)</p>
+  <div class="callout tip">
+    <div class="callout-title">💡 Lock the origin down (optional)</div>
+    <p>If everything goes through Cloudflare, you can make the server accept web traffic <em>only</em> from Cloudflare by allowing those same IP ranges on 80 and 443 in your cloud firewall. Then nobody can bypass Cloudflare by connecting to your IP directly. Cloudflare Tunnel (below) achieves the same thing more simply.</p>
+  </div>
+</section>
+
+<section id="cf-tunnel">
+  <h3 style="font-size:24px;margin-top:48px">Cloudflare Tunnel: expose a server with no open ports</h3>
+  <p>A tunnel opens an <em>outbound</em> connection from your server to Cloudflare, so you can close ports 80 and 443 completely. It even works for a computer at home behind your router.</p>
+  <div class="code"><div class="code-head"><span>server</span></div><pre><code><span class="c"># install cloudflared: see Cloudflare's docs for the apt repo, or:</span>
+curl -L -o cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+sudo dpkg -i cloudflared.deb
+
+cloudflared tunnel login                         <span class="c"># pick your domain in the browser</span>
+cloudflared tunnel create myapp                  <span class="c"># prints a tunnel ID</span>
+cloudflared tunnel route dns myapp myapp.com</code></pre></div>
+  <div class="code"><div class="code-head"><span>~/.cloudflared/config.yml</span></div><pre><code><span class="k">tunnel:</span> myapp
+<span class="k">credentials-file:</span> /home/deploy/.cloudflared/TUNNEL_ID.json
+<span class="k">ingress:</span>
+  - <span class="k">hostname:</span> myapp.com
+    <span class="k">service:</span> http://localhost:80     <span class="c"># your Caddy/Nginx (serve HTTP only)</span>
+  - <span class="k">service:</span> http_status:404</code></pre></div>
+  <div class="code"><div class="code-head"><span>server</span></div><pre><code>sudo mkdir -p /etc/cloudflared &amp;&amp; sudo cp ~/.cloudflared/config.yml /etc/cloudflared/
+<span class="c"># edit /etc/cloudflared/config.yml if needed so credentials-file points to the right place</span>
+sudo cloudflared service install
+sudo systemctl status cloudflared</code></pre></div>
+  <p>With a tunnel, Cloudflare handles HTTPS, so change your Caddyfile's site address to <code>:80</code> (or <code>http://myapp.com</code>). That stops Caddy from trying to get its own certificate. The easier, all-in-dashboard alternative is <em>Zero Trust → Networks → Tunnels</em>, which gives you a single install command.</p>
+</section>
+
+<!-- ================= REFERENCE ================= -->
+<section id="costs">
+  <h2>What it costs</h2>
+  <p>Rough monthly prices for a small app (a few thousand users) as of late 2026. Prices change, so check each provider's current pricing.</p>
+  <table>
+    <tr><th>Setup</th><th>Monthly</th><th>You manage</th><th>Best for</th></tr>
+    <tr><td><strong>Single VPS</strong> (Part 1)</td><td>$5–12</td><td>Everything: OS, updates, backups</td><td>Learning, side projects, small businesses</td></tr>
+    <tr><td><strong>Cloudflare Pages + VPS API</strong></td><td>$5–12</td><td>The API server</td><td>Fast global frontend, simple backend</td></tr>
+    <tr><td><strong>Cloudflare Pages + Workers + D1</strong></td><td>$0–5</td><td>Almost nothing</td><td>Apps that fit the Workers model</td></tr>
+    <tr><td><strong>AWS EC2/Lightsail</strong> (Part 1 on AWS)</td><td>$5–20</td><td>Same as a VPS</td><td>Learning AWS, existing AWS users</td></tr>
+    <tr><td><strong>AWS S3/CloudFront + ECS + RDS + ALB</strong></td><td>$40–80</td><td>Config, not servers</td><td>Production needing redundancy and scaling</td></tr>
+    <tr><td>Vercel/Render/Railway (for comparison)</td><td>$0–25+</td><td>Nothing</td><td>Speed of shipping; costs grow with usage</td></tr>
+  </table>
+  <p>Plus a domain name (~$10–15/year), and optional extras: provider snapshots (~$1–2), off-site backup storage (often free at small sizes), Sentry/uptime monitoring (free tiers).</p>
+</section>
+
+<section id="golive">
+  <h2>Go-live checklist</h2>
+  <p>Before you share the link with real users:</p>
+  <ul class="checklist">
+    <li><input type="checkbox"><span><code>NODE_ENV=production</code> (or the equivalent) is set, and debug mode is off (<code>DEBUG=False</code> in Django)</span></li>
+    <li><input type="checkbox"><span>Error responses don't show stack traces to users</span></li>
+    <li><input type="checkbox"><span>All secrets are real, random and different from development</span></li>
+    <li><input type="checkbox"><span>CORS only allows your own domain(s), never <code>*</code> together with credentials</span></li>
+    <li><input type="checkbox"><span>Cookies are <code>httpOnly</code>, <code>secure</code> and <code>sameSite</code></span></li>
+    <li><input type="checkbox"><span>Login and signup routes have rate limiting (e.g. <code>express-rate-limit</code>)</span></li>
+    <li><input type="checkbox"><span>File uploads have a size limit, and the file type is checked</span></li>
+    <li><input type="checkbox"><span>HTTPS works for every domain; HTTP redirects to HTTPS; SSL Labs grade A</span></li>
+    <li><input type="checkbox"><span>Refreshing deep links works (SPA fallback)</span></li>
+    <li><input type="checkbox"><span>A custom 404 page exists</span></li>
+    <li><input type="checkbox"><span>Tested on a phone, over mobile data (not your Wi-Fi)</span></li>
+    <li><input type="checkbox"><span>Backups are running, and you've done a restore drill</span></li>
+    <li><input type="checkbox"><span>Uptime monitoring and error tracking send alerts somewhere you'll actually see them</span></li>
+    <li><input type="checkbox"><span>You've written down how to deploy, roll back, and restore (future you will be glad)</span></li>
+  </ul>
+</section>
+
+<section id="troubleshooting">
+  <h2>Troubleshooting</h2>
+  <table>
+    <tr><th>Symptom</th><th>Likely cause</th><th>What to check</th></tr>
+    <tr><td><strong>502 Bad Gateway</strong></td><td>Backend is down or on a different port</td><td><code>systemctl status myapp</code>, <code>journalctl -u myapp -n 50</code>, <code>curl 127.0.0.1:3000</code>, <code>sudo ss -tlnp</code></td></tr>
+    <tr><td>Site doesn't load at all / times out</td><td>Firewall or DNS</td><td><code>dig myapp.com</code>, <code>sudo ufw status</code>, AWS Security Group, <code>systemctl status caddy</code></td></tr>
+    <tr><td>HTTPS certificate fails</td><td>DNS not pointing at the server yet, port 80 blocked, or Cloudflare proxy on</td><td><code>journalctl -u caddy -n 50</code>; switch Cloudflare to grey cloud while the certificate is issued</td></tr>
+    <tr><td><strong>Too many redirects</strong></td><td>Cloudflare SSL mode is "Flexible"</td><td>Cloudflare → SSL/TLS → set to <strong>Full (strict)</strong></td></tr>
+    <tr><td>Refreshing <code>/dashboard</code> gives 404</td><td>No SPA fallback</td><td>Caddy <code>try_files {path} /index.html</code> / Nginx <code>try_files $uri /index.html</code> / CloudFront error pages</td></tr>
+    <tr><td>Frontend loads, API calls fail</td><td>Calling <code>localhost</code> from the browser, or CORS</td><td>Browser DevTools → Network tab. Use relative <code>/api</code> URLs.</td></tr>
+    <tr><td>App crashes: env var undefined</td><td><code>.env</code> not loaded</td><td><code>EnvironmentFile=</code> path in the unit; no quotes or <code>export</code> in the file; <code>daemon-reload</code> + restart</td></tr>
+    <tr><td>Build gets "Killed"</td><td>Out of memory</td><td>Add swap (<a href="#step-2">step 2.6</a>) or build in CI</td></tr>
+    <tr><td>Permission denied (publickey)</td><td>Wrong user or key</td><td><code>ssh -v deploy@IP</code>; EC2 uses <code>ubuntu</code>; <code>chmod 600 ~/.ssh/authorized_keys</code></td></tr>
+    <tr><td>"Address already in use"</td><td>Another process holds the port</td><td><code>sudo ss -tlnp | grep :3000</code>, then stop it</td></tr>
+    <tr><td>Disk full</td><td>Logs, old Docker images, backups</td><td><code>df -h</code>, <code>sudo du -sh /var/* | sort -h</code>, <code>docker system prune</code>, <code>sudo journalctl --vacuum-size=200M</code></td></tr>
+  </table>
+  <div class="callout tip">
+    <div class="callout-title">💡 How to debug, in general</div>
+    <p>Follow the request from the inside out. Does the backend respond to <code>curl 127.0.0.1:3000</code> <em>on the server</em>? Does the proxy respond to <code>curl -I http://localhost</code>? Does DNS resolve? Is the firewall open? The first step that fails is where the problem is.</p>
+  </div>
+</section>
+
+<section id="security">
+  <h2>Security checklist</h2>
+  <ul class="checklist" id="secList">
+    <li><input type="checkbox" data-sec="1"><span>Log in with SSH keys only; password and root login disabled</span></li>
+    <li><input type="checkbox" data-sec="2"><span>Firewall allows only 22, 80, 443 (ufw <em>and</em> cloud firewall)</span></li>
+    <li><input type="checkbox" data-sec="3"><span><code>unattended-upgrades</code> installed for automatic security patches</span></li>
+    <li><input type="checkbox" data-sec="4"><span>App runs as a non-root user, listening on 127.0.0.1</span></li>
+    <li><input type="checkbox" data-sec="5"><span>Database not reachable from the internet</span></li>
+    <li><input type="checkbox" data-sec="6"><span><code>.env</code> is <code>chmod 600</code> and in <code>.gitignore</code></span></li>
+    <li><input type="checkbox" data-sec="7"><span>HTTPS everywhere; HTTP redirects to HTTPS</span></li>
+    <li><input type="checkbox" data-sec="8"><span>Nightly backups, copied off the server, and a restore tested</span></li>
+    <li><input type="checkbox" data-sec="9"><span>Cloud billing alert set (AWS Budgets)</span></li>
+    <li><input type="checkbox" data-sec="10"><span>MFA on your cloud, DNS registrar and GitHub accounts</span></li>
+    <li><input type="checkbox" data-sec="11"><span>Optional: <code>fail2ban</code> to block repeated SSH login attempts (<code>sudo apt install fail2ban</code>)</span></li>
+    <li><input type="checkbox" data-sec="12"><span>Optional: uptime monitoring (UptimeRobot, Better Stack, or Uptime Kuma self-hosted)</span></li>
+  </ul>
+</section>
+
+<section id="faq">
+  <h2>FAQ</h2>
+
+  <details><summary>How much traffic can a $5 server handle?</summary>
+  <p>More than you'd expect. Caddy can serve static files to thousands of visitors per second. A typical Node or Python API on 1–2 vCPUs can handle hundreds of simple requests per second. The usual bottleneck is slow database queries, not the server itself. Most side projects never come close to outgrowing a single VPS. When you do, the first step is simply resizing it to a bigger plan.</p></details>
+
+  <details><summary>Is self-hosting secure enough?</summary>
+  <p>If you follow step 2 and the <a href="#security">security checklist</a>, your server is better protected than most. The biggest real-world risks are, in order: leaked secrets in Git, unpatched software, weak or reused passwords on your accounts, and bugs in your own app (SQL injection, missing auth checks). Hosting it yourself doesn't make app-level bugs any better or worse.</p></details>
+
+  <details><summary>What happens if the server dies?</summary>
+  <p>With backups set up, you create a new server, run through steps 2–9 again (or <code>docker compose up</code> if you did step 10), restore the latest database dump, and update DNS. Writing that process down, or scripting it, turns a disaster into an hour of work. Provider snapshots make it even faster.</p></details>
+
+  <details><summary>Can I host on a computer at home?</summary>
+  <p>Yes. Use <a href="#cf-tunnel">Cloudflare Tunnel</a> so you don't need to open router ports or have a static IP. Downsides: power cuts, home internet uptime, your ISP's terms of service, and the machine being in your house. It's great for learning and personal tools. Use a VPS for anything people depend on.</p></details>
+
+  <details><summary>Should I run my own email server?</summary>
+  <p>No. Getting email delivered to inboxes (not spam) is a full-time job. For app emails (password resets, notifications) use a service like Resend, Postmark, Amazon SES or Mailgun. They give you DNS records (SPF/DKIM) to add to your domain.</p></details>
+
+  <details><summary>Where do uploaded files (avatars, images) go?</summary>
+  <p>Avoid storing them on the server's disk: it fills up, isn't backed up by default, and doesn't work once you have more than one server. Use object storage such as <strong>Cloudflare R2</strong> or <strong>AWS S3</strong>, ideally with "presigned URLs" so the browser uploads directly to the bucket.</p></details>
+
+  <details><summary>Docker or no Docker?</summary>
+  <p>Learn without it first (steps 1–9) so you understand what's going on. Then move to Docker: it makes servers reproducible, makes moving providers easy, and it's what ECS, Fly.io, Cloud Run and Kubernetes all expect. For a single small app, either is fine.</p></details>
+
+  <details><summary>Do I need Kubernetes?</summary>
+  <p>Almost certainly not. Kubernetes is for organisations running dozens of services across many machines. A VPS with Docker Compose, or ECS, covers the vast majority of apps.</p></details>
+
+  <details><summary>How do I move to a different provider later?</summary>
+  <p>Set up the new server (Docker makes this quick), copy the latest database dump and restore it, test using the new IP, then lower the DNS TTL, briefly stop writes to the old app, take a final dump, restore it on the new server, and switch DNS over. Keep the old server running for a few days until you're sure.</p></details>
+</section>
+
+<section id="roadmap">
+  <h2>Learning roadmap</h2>
+  <ol>
+    <li><strong>Week 1:</strong> Deploy the <a href="#sample-app">sample app</a> through steps 1–8 by hand. Break things on purpose (stop the backend, mistype the Caddyfile, point DNS at the wrong IP) and fix them using <a href="#troubleshooting">Troubleshooting</a>.</li>
+    <li><strong>Week 2:</strong> Deploy script, then GitHub Actions (step 9). Set up backups and do the restore drill. Add monitoring (step 11).</li>
+    <li><strong>Week 3:</strong> Move the stack to Docker Compose (step 10). Delete the server and rebuild it from scratch to prove you can. Add staging (step 12).</li>
+    <li><strong>Week 4:</strong> Move the frontend to Cloudflare Pages <em>or</em> S3 + CloudFront. Try a Worker.</li>
+    <li><strong>Later:</strong> RDS, ECS Fargate, Terraform, monitoring (Prometheus/Grafana), log aggregation, zero-downtime deploys.</li>
+  </ol>
+</section>
+
+<section id="glossary">
+  <h2>Glossary</h2>
+  <table>
+    <tr><th>Term</th><th>Meaning</th></tr>
+    <tr><td>VPS</td><td>Virtual Private Server: a virtual machine you rent, with full root access.</td></tr>
+    <tr><td>SSH</td><td>Secure Shell: an encrypted way to log in to and control a remote machine.</td></tr>
+    <tr><td>DNS / A record</td><td>The internet's phone book. An A record maps a name (myapp.com) to an IPv4 address.</td></tr>
+    <tr><td>Reverse proxy</td><td>A server that receives every request and forwards it to the right internal service (Caddy, Nginx).</td></tr>
+    <tr><td>TLS / HTTPS certificate</td><td>Proves your domain's identity and encrypts traffic. Let's Encrypt issues them free.</td></tr>
+    <tr><td>systemd</td><td>Linux's service manager. It starts, stops, restarts and logs long-running programs.</td></tr>
+    <tr><td>Port</td><td>A numbered "door" on a machine: 22 = SSH, 80 = HTTP, 443 = HTTPS, 5432 = Postgres.</td></tr>
+    <tr><td>localhost / 127.0.0.1</td><td>"This machine". Services bound here can't be reached from outside.</td></tr>
+    <tr><td>CDN</td><td>Content Delivery Network: copies your files to servers worldwide so they load fast everywhere.</td></tr>
+    <tr><td>Container / Docker</td><td>Packages an app with everything it needs so it runs the same way anywhere.</td></tr>
+    <tr><td>CORS</td><td>A browser rule that blocks a page from calling an API on a different domain unless the API allows it.</td></tr>
+    <tr><td>SPA fallback</td><td>Serving <code>index.html</code> for unknown paths so client-side routes work when the page is refreshed.</td></tr>
+    <tr><td>Migration</td><td>A versioned script that changes the database schema; run on every deploy.</td></tr>
+    <tr><td>Symlink</td><td>A file that points to another path. Used for the <code>current</code> release so you can switch versions instantly.</td></tr>
+    <tr><td>OIDC</td><td>Lets CI (GitHub Actions) get short-lived cloud credentials without storing permanent keys.</td></tr>
+    <tr><td>Staging</td><td>A private copy of production for testing changes before real users see them.</td></tr>
+    <tr><td>Health check</td><td>An endpoint (e.g. <code>/api/health</code>) that monitors and load balancers call to see if the app is working.</td></tr>
+    <tr><td>Origin</td><td>(1) Your actual server behind a CDN. (2) In browsers: scheme + domain + port, which is what CORS compares.</td></tr>
+  </table>
+</section>
+
+<footer>
+  Self-Hosting Guide · Written November 2026 · Commands target Ubuntu 24.04 LTS. Provider prices and dashboards change, so check current pricing before you commit.
+</footer>
+
+</div>
+</main>
+
+<script>
+(function(){
+  // ---------- theme ----------
+  const root = document.documentElement;
+  const saved = localStorage.getItem("shg-theme");
+  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  root.setAttribute("data-theme", saved || (prefersDark ? "dark" : "light"));
+  document.getElementById("themeBtn").onclick = () => {
+    const t = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    root.setAttribute("data-theme", t);
+    localStorage.setItem("shg-theme", t);
+  };
+
+  // ---------- mobile menu ----------
+  const sidebar = document.getElementById("sidebar");
+  document.getElementById("menuBtn").onclick = () => sidebar.classList.toggle("open");
+  sidebar.querySelectorAll("nav a").forEach(a => a.addEventListener("click", () => sidebar.classList.remove("open")));
+
+  // ---------- copy buttons ----------
+  document.querySelectorAll(".code").forEach(block => {
+    const head = block.querySelector(".code-head");
+    const code = block.querySelector("code");
+    const btn = document.createElement("button");
+    btn.className = "copy-btn";
+    btn.textContent = "Copy";
+    btn.onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(code.innerText);
+      } catch (e) {
+        const ta = document.createElement("textarea");
+        ta.value = code.innerText; document.body.appendChild(ta); ta.select();
+        document.execCommand("copy"); ta.remove();
+      }
+      btn.textContent = "Copied ✓"; btn.classList.add("ok");
+      setTimeout(() => { btn.textContent = "Copy"; btn.classList.remove("ok"); }, 1500);
+    };
+    head.appendChild(btn);
+  });
+
+  // ---------- tabs ----------
+  document.querySelectorAll(".tabs").forEach(tabs => {
+    const btns = tabs.querySelectorAll(":scope > .tab-list > .tab-btn");
+    const panels = tabs.querySelectorAll(":scope > .tab-panel");
+    btns.forEach((b, i) => b.onclick = () => {
+      btns.forEach(x => x.classList.remove("active"));
+      panels.forEach(x => x.classList.remove("active"));
+      b.classList.add("active"); panels[i].classList.add("active");
+    });
+  });
+
+  // ---------- progress ----------
+  const TOTAL = 12;
+  const KEY = "shg-progress";
+  const state = JSON.parse(localStorage.getItem(KEY) || "{}");
+  const stepBoxes = document.querySelectorAll("input[data-step]");
+  function render(){
+    let n = 0;
+    stepBoxes.forEach(cb => {
+      cb.checked = !!state[cb.dataset.step];
+      if (cb.checked) n++;
+      const link = document.querySelector('nav a[data-step="' + cb.dataset.step + '"]');
+      if (link) link.classList.toggle("done", cb.checked);
+    });
+    document.getElementById("progFill").style.width = (n / TOTAL * 100) + "%";
+    document.getElementById("progText").textContent = n + " / " + TOTAL + " steps done" + (n === TOTAL ? " 🎉" : "");
+  }
+  stepBoxes.forEach(cb => cb.addEventListener("change", () => {
+    state[cb.dataset.step] = cb.checked;
+    localStorage.setItem(KEY, JSON.stringify(state));
+    render();
+  }));
+  document.getElementById("resetProg").onclick = () => {
+    if (!confirm("Reset your progress?")) return;
+    for (const k in state) delete state[k];
+    localStorage.setItem(KEY, "{}");
+    render();
+  };
+  render();
+
+  // security checklist persistence
+  const SKEY = "shg-security";
+  const sstate = JSON.parse(localStorage.getItem(SKEY) || "{}");
+  document.querySelectorAll("input[data-sec]").forEach(cb => {
+    cb.checked = !!sstate[cb.dataset.sec];
+    cb.addEventListener("change", () => { sstate[cb.dataset.sec] = cb.checked; localStorage.setItem(SKEY, JSON.stringify(sstate)); });
+  });
+
+  // ---------- scrollspy ----------
+  const links = [...document.querySelectorAll("#nav a")];
+  const targets = links.map(a => document.querySelector(a.getAttribute("href"))).filter(Boolean);
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        links.forEach(l => l.classList.toggle("active", l.getAttribute("href") === "#" + e.target.id));
+      }
+    });
+  }, { rootMargin: "-10% 0px -80% 0px" });
+  targets.forEach(t => obs.observe(t));
+})();
+</script>
+</body>
+</html>
