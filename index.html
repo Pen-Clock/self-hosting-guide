@@ -149,7 +149,7 @@ footer{margin-top:80px;color:var(--fg-soft);font-size:13px;border-top:1px solid 
 
   <div class="progress">
     <div class="progress-bar"><div class="progress-fill" id="progFill"></div></div>
-    <div class="progress-label"><span id="progText">0 / 12 steps done</span><button id="resetProg">reset</button></div>
+    <div class="progress-label"><span id="progText">0 / 14 steps done</span><button id="resetProg">reset</button></div>
   </div>
 
   <nav id="nav">
@@ -174,6 +174,8 @@ footer{margin-top:80px;color:var(--fg-soft);font-size:13px;border-top:1px solid 
     <a href="#step-10" data-step="10">10. Level up with Docker <span class="tick">✓</span></a>
     <a href="#step-11" data-step="11">11. Monitoring &amp; upkeep <span class="tick">✓</span></a>
     <a href="#step-12" data-step="12">12. More apps &amp; staging <span class="tick">✓</span></a>
+    <a href="#step-13" data-step="13">13. Redis cache <span class="tick">✓</span></a>
+    <a href="#step-14" data-step="14">14. CDN &amp; HTTP caching <span class="tick">✓</span></a>
 
     <div class="nav-group">Part 2 · AWS</div>
     <a href="#aws">The AWS map</a>
@@ -229,6 +231,8 @@ footer{margin-top:80px;color:var(--fg-soft);font-size:13px;border-top:1px solid 
     <tr><td>Reproducible builds</td><td>Docker &amp; Docker Compose</td><td><a href="#step-10">10</a></td></tr>
     <tr><td>Status alerts &amp; logs dashboard</td><td>Uptime monitor, Sentry, journalctl</td><td><a href="#step-11">11</a></td></tr>
     <tr><td>Preview deployments</td><td>A password-protected staging site</td><td><a href="#step-12">12</a></td></tr>
+    <tr><td>Fast responses under load (data cache)</td><td>Redis</td><td><a href="#step-13">13</a></td></tr>
+    <tr><td>Global edge network / CDN caching</td><td>Cache-Control headers + Cloudflare or CloudFront</td><td><a href="#step-14">14</a></td></tr>
   </table>
 
   <div class="callout info">
@@ -1655,6 +1659,396 @@ coolthing.dev {
   </div>
 </section>
 
+<!-- STEP 13 -->
+<section id="step-13">
+  <div class="step-head"><div class="step-num">13</div><h2>Add a Redis cache</h2><label class="done-toggle"><input type="checkbox" data-step="13"> Mark done</label></div>
+  <p class="goal">Goal: keep the results of slow or frequent work in memory, so repeat requests skip the database and return in about a millisecond.</p>
+
+  <div class="callout why">
+    <div class="callout-title">🧠 When do you actually need this?</div>
+    <p>Not on day one. Add Redis when you can point to something slow: a heavy query running on every page load, a slow third-party API, or the database CPU climbing under traffic. Measure first (step 13.8). A cache adds a new way to show <em>wrong</em> (stale) data, so only add one where it buys you real speed.</p>
+  </div>
+
+  <h3>13.1 How the cache-aside pattern works</h3>
+  <p>The most common pattern is <strong>cache-aside</strong> (also called lazy loading). Your app asks Redis first and only goes to the database if Redis doesn't have the answer:</p>
+  <div class="diagram">
+    <div class="d-row"><div class="d-box"><b>Request</b>GET /api/products/42</div></div>
+    <div class="d-arrow">↓ 1. look up key <code>product:42</code></div>
+    <div class="d-row"><div class="d-box b4"><b>Redis</b>in memory · ~0.2 ms</div></div>
+    <div class="d-row" style="margin-top:8px">
+      <div class="d-box"><b>✅ Hit</b>return cached JSON straight away</div>
+      <div class="d-box"><b>❌ Miss</b>2. query Postgres (5–200 ms)<br>3. store the result in Redis with a TTL<br>4. return it</div>
+    </div>
+  </div>
+  <p>Every cached value gets a <strong>TTL</strong> (time to live), after which Redis deletes it on its own. Even if you forget to invalidate something, it's never stale for longer than the TTL.</p>
+
+  <h3>13.2 Install Redis on the server</h3>
+  <div class="code"><div class="code-head"><span>server</span></div><pre><code>sudo apt install -y redis-server
+redis-cli ping            <span class="c"># → PONG</span></code></pre></div>
+
+  <h3>13.3 Configure it for caching</h3>
+  <p>Edit <code>sudo nano /etc/redis/redis.conf</code>. Use <kbd>Ctrl</kbd>+<kbd>W</kbd> to find each setting, and change or add:</p>
+  <div class="code"><div class="code-head"><span>/etc/redis/redis.conf</span></div><pre><code><span class="c"># only accept connections from this machine (this is the default; make sure it's still set)</span>
+bind 127.0.0.1 -::1
+protected-mode yes
+
+<span class="c"># require a password: generate one with  openssl rand -hex 32</span>
+requirepass PASTE_A_LONG_RANDOM_PASSWORD
+
+<span class="c"># cap memory use; when full, evict the least-recently-used keys</span>
+maxmemory 256mb
+maxmemory-policy allkeys-lru</code></pre></div>
+  <div class="code"><div class="code-head"><span>server</span></div><pre><code>sudo systemctl restart redis-server
+sudo systemctl enable redis-server
+
+export REDISCLI_AUTH=PASTE_A_LONG_RANDOM_PASSWORD   <span class="c"># so redis-cli can log in</span>
+redis-cli ping                                      <span class="c"># → PONG</span>
+redis-cli CONFIG GET maxmemory-policy               <span class="c"># → allkeys-lru</span>
+sudo ss -tlnp | grep 6379                           <span class="c"># → only 127.0.0.1 / ::1</span></code></pre></div>
+
+  <table>
+    <tr><th>Setting</th><th>Why</th></tr>
+    <tr><td><code>bind 127.0.0.1 -::1</code></td><td>Redis is never reachable from the internet. Exposed Redis servers are a very common target and get taken over by bots.</td></tr>
+    <tr><td><code>requirepass</code></td><td>Defence in depth: even another process on the box needs the password.</td></tr>
+    <tr><td><code>maxmemory 256mb</code></td><td>Without a cap, the cache can grow until the server runs out of RAM and starts killing processes. Size it to about 10–25% of server RAM.</td></tr>
+    <tr><td><code>allkeys-lru</code></td><td>When it's full, Redis drops the entries used least recently. That's the right behaviour for a cache. (Use <code>noeviction</code> instead if Redis holds queues or sessions you can't lose.)</td></tr>
+  </table>
+
+  <p>Add the connection URL to your backend's <code>.env</code> (the <code>:</code> before the password is intentional, because there's no username):</p>
+  <div class="code"><div class="code-head"><span>~/app/backend/.env</span></div><pre><code>REDIS_URL=redis://:PASTE_A_LONG_RANDOM_PASSWORD@127.0.0.1:6379</code></pre></div>
+
+  <div class="callout info">
+    <div class="callout-title">ℹ️ Redis or Valkey?</div>
+    <p><strong>Valkey</strong> is an open-source fork of Redis, created after Redis changed its license, and it works as a drop-in replacement. It uses the same commands, clients and config. Everything in this step works with either. Use whichever your OS or provider offers; in Docker that's the <code>valkey/valkey</code> image instead of <code>redis</code>.</p>
+  </div>
+
+  <h3>13.4 Use it from your code</h3>
+  <div class="tabs">
+    <div class="tab-list"><button class="tab-btn active">Node.js</button><button class="tab-btn">Python</button></div>
+    <div class="tab-panel active">
+      <div class="code"><div class="code-head"><span>backend: npm install redis</span></div><pre><code><span class="c">// src/cache.js</span>
+<span class="k">import</span> { createClient } <span class="k">from</span> <span class="s">"redis"</span>;
+
+<span class="k">export const</span> redis = createClient({ url: process.env.REDIS_URL });
+redis.on(<span class="s">"error"</span>, (err) =&gt; console.error(<span class="s">"Redis error:"</span>, err.message));
+<span class="k">await</span> redis.connect();
+
+<span class="c">/**
+ * Return the cached value for `key`, or run `load()`, cache its result
+ * for `ttlSeconds`, and return it. If Redis is down, it falls back to
+ * load(), so the site still works, just slower.
+ */</span>
+<span class="k">export async function</span> cached(key, ttlSeconds, load) {
+  <span class="k">try</span> {
+    <span class="k">const</span> hit = <span class="k">await</span> redis.get(key);
+    <span class="k">if</span> (hit !== <span class="k">null</span>) <span class="k">return</span> JSON.parse(hit);
+  } <span class="k">catch</span> (err) {
+    console.error(<span class="s">"cache read failed:"</span>, err.message);
+  }
+
+  <span class="k">const</span> value = <span class="k">await</span> load();
+
+  <span class="k">try</span> {
+    <span class="k">await</span> redis.set(key, JSON.stringify(value), { EX: ttlSeconds });
+  } <span class="k">catch</span> (err) {
+    console.error(<span class="s">"cache write failed:"</span>, err.message);
+  }
+  <span class="k">return</span> value;
+}</code></pre></div>
+      <div class="code"><div class="code-head"><span>src/index.js: using it</span></div><pre><code><span class="k">import</span> { redis, cached } <span class="k">from</span> <span class="s">"./cache.js"</span>;
+
+<span class="c">// READ: cached for 5 minutes</span>
+app.get(<span class="s">"/api/products/:id"</span>, <span class="k">async</span> (req, res) =&gt; {
+  <span class="k">const</span> id = Number(req.params.id);
+  <span class="k">const</span> product = <span class="k">await</span> cached(<span class="s">`v1:product:${id}`</span>, 300, <span class="k">async</span> () =&gt; {
+    <span class="k">const</span> { rows } = <span class="k">await</span> pool.query(<span class="s">"SELECT * FROM products WHERE id = $1"</span>, [id]);
+    <span class="k">return</span> rows[0] ?? <span class="k">null</span>;
+  });
+  <span class="k">if</span> (!product) <span class="k">return</span> res.status(404).json({ error: <span class="s">"Not found"</span> });
+  res.json(product);
+});
+
+<span class="c">// WRITE: update the database, then delete the cached copy</span>
+app.put(<span class="s">"/api/products/:id"</span>, <span class="k">async</span> (req, res) =&gt; {
+  <span class="k">const</span> id = Number(req.params.id);
+  <span class="k">await</span> pool.query(<span class="s">"UPDATE products SET name = $1, price = $2 WHERE id = $3"</span>,
+    [req.body.name, req.body.price, id]);
+  <span class="k">await</span> redis.del([<span class="s">`v1:product:${id}`</span>, <span class="s">"v1:products:list"</span>]);
+  res.json({ ok: <span class="k">true</span> });
+});</code></pre></div>
+    </div>
+    <div class="tab-panel">
+      <div class="code"><div class="code-head"><span>backend: pip install redis</span></div><pre><code><span class="c"># cache.py</span>
+<span class="k">import</span> json, os, logging
+<span class="k">import</span> redis
+
+r = redis.Redis.from_url(os.environ[<span class="s">"REDIS_URL"</span>], decode_responses=<span class="k">True</span>)
+
+<span class="k">def</span> cached(key, ttl_seconds, load):
+    <span class="s">"""Return the cached value, or call load(), cache it, and return it."""</span>
+    <span class="k">try</span>:
+        hit = r.get(key)
+        <span class="k">if</span> hit <span class="k">is not None</span>:
+            <span class="k">return</span> json.loads(hit)
+    <span class="k">except</span> redis.RedisError <span class="k">as</span> e:
+        logging.warning(<span class="s">"cache read failed: %s"</span>, e)
+
+    value = load()
+    <span class="k">try</span>:
+        r.set(key, json.dumps(value, default=str), ex=ttl_seconds)
+    <span class="k">except</span> redis.RedisError <span class="k">as</span> e:
+        logging.warning(<span class="s">"cache write failed: %s"</span>, e)
+    <span class="k">return</span> value</code></pre></div>
+      <div class="code"><div class="code-head"><span>main.py (FastAPI)</span></div><pre><code><span class="k">from</span> cache <span class="k">import</span> r, cached
+
+<span class="h">@app.get</span>(<span class="s">"/api/products/{product_id}"</span>)
+<span class="k">def</span> get_product(product_id: int):
+    product = cached(<span class="s">f"v1:product:{product_id}"</span>, 300,
+                     <span class="k">lambda</span>: db.fetch_product(product_id))
+    <span class="k">if</span> product <span class="k">is None</span>:
+        <span class="k">raise</span> HTTPException(404)
+    <span class="k">return</span> product
+
+<span class="h">@app.put</span>(<span class="s">"/api/products/{product_id}"</span>)
+<span class="k">def</span> update_product(product_id: int, body: ProductIn):
+    db.update_product(product_id, body)
+    r.delete(<span class="s">f"v1:product:{product_id}"</span>, <span class="s">"v1:products:list"</span>)
+    <span class="k">return</span> {<span class="s">"ok"</span>: <span class="k">True</span>}</code></pre></div>
+    </div>
+  </div>
+
+  <h3>13.5 Choosing keys and TTLs</h3>
+  <table>
+    <tr><th>Rule</th><th>Example</th></tr>
+    <tr><td>Use readable keys with <code>:</code> separators</td><td><code>v1:product:42</code>, <code>v1:user:7:orders</code></td></tr>
+    <tr><td>Start with a version prefix. Bump it when the data's shape changes, so old entries are simply ignored</td><td><code>v1:</code> → <code>v2:</code></td></tr>
+    <tr><td><strong>Put the user ID in the key for anything per-user</strong>, or one user may be shown another user's data</td><td><code>v1:user:7:cart</code>, never just <code>v1:cart</code></td></tr>
+    <tr><td>Include every input that changes the result</td><td><code>v1:search:q=shoes:page=2:sort=price</code></td></tr>
+    <tr><td>Short TTL for data that changes often; long TTL for data that rarely does</td><td>Stock levels 30 s · product details 5–60 min · country list 24 h</td></tr>
+  </table>
+
+  <h3>13.6 Other things Redis is great for</h3>
+  <table>
+    <tr><th>Use</th><th>Node package</th><th>Why Redis</th></tr>
+    <tr><td>Rate limiting</td><td><code>express-rate-limit</code> + <code>rate-limit-redis</code></td><td>Limits are shared across every app process and survive restarts</td></tr>
+    <tr><td>Login sessions</td><td><code>express-session</code> + <code>connect-redis</code></td><td>Users stay logged in through deploys and restarts</td></tr>
+    <tr><td>Background jobs</td><td><code>bullmq</code></td><td>Send emails or resize images outside the request, with retries</td></tr>
+    <tr><td>Real-time pub/sub</td><td><code>redis</code> (<code>subscribe</code>/<code>publish</code>)</td><td>Fan out WebSocket messages across several app processes</td></tr>
+  </table>
+  <div class="callout warn">
+    <div class="callout-title">⚠️ Sessions and queues are not "just cache"</div>
+    <p>If Redis holds sessions or jobs, losing it logs everyone out or drops jobs. For those, use <code>maxmemory-policy noeviction</code>, enable persistence (<code>appendonly yes</code>), or run a <em>separate</em> Redis instance for them so cache evictions can't touch them.</p>
+  </div>
+
+  <h3>13.7 With Docker Compose</h3>
+  <p>Add a service to the <code>docker-compose.yml</code> from step 10. Put <code>REDIS_PASSWORD=…</code> in a <code>.env</code> file next to the compose file (Compose reads it automatically for <code>${…}</code> values):</p>
+  <div class="code"><div class="code-head"><span>docker-compose.yml (additions)</span></div><pre><code><span class="k">services:</span>
+  <span class="k">api:</span>
+    <span class="c"># …existing config, plus:</span>
+    <span class="k">environment:</span>
+      <span class="k">REDIS_URL:</span> redis://:${REDIS_PASSWORD}@redis:6379
+    <span class="k">depends_on:</span>
+      <span class="k">db:</span>
+        <span class="k">condition:</span> service_healthy
+      <span class="k">redis:</span>
+        <span class="k">condition:</span> service_healthy
+
+  <span class="k">redis:</span>
+    <span class="k">image:</span> redis:7-alpine              <span class="c"># or valkey/valkey:8-alpine</span>
+    <span class="k">restart:</span> unless-stopped
+    <span class="k">command:</span> [<span class="s">"redis-server"</span>, <span class="s">"--requirepass"</span>, <span class="s">"${REDIS_PASSWORD}"</span>,
+              <span class="s">"--maxmemory"</span>, <span class="s">"256mb"</span>, <span class="s">"--maxmemory-policy"</span>, <span class="s">"allkeys-lru"</span>]
+    <span class="k">healthcheck:</span>
+      <span class="k">test:</span> [<span class="s">"CMD-SHELL"</span>, <span class="s">"REDISCLI_AUTH=$$REDIS_PASSWORD redis-cli ping | grep PONG"</span>]
+      <span class="k">interval:</span> 5s
+      <span class="k">retries:</span> 10
+    <span class="k">environment:</span>
+      <span class="k">REDIS_PASSWORD:</span> ${REDIS_PASSWORD}
+    <span class="c"># NO "ports:" — only other containers can reach it</span></code></pre></div>
+  <p>(<code>$$</code> escapes the dollar sign so the variable is read <em>inside</em> the container rather than by Compose.)</p>
+
+  <h3>13.8 Prove it's working</h3>
+  <div class="code"><div class="code-head"><span>server</span></div><pre><code><span class="c"># time the same request twice: the second should be much faster</span>
+curl -s -o /dev/null -w "%{time_total}s\n" http://127.0.0.1:3000/api/products/42
+curl -s -o /dev/null -w "%{time_total}s\n" http://127.0.0.1:3000/api/products/42
+
+redis-cli --scan --pattern 'v1:*' | head    <span class="c"># which keys exist</span>
+redis-cli TTL v1:product:42                 <span class="c"># seconds left before it expires</span>
+redis-cli INFO stats | grep -E 'keyspace_(hits|misses)'
+redis-cli INFO memory | grep used_memory_human</code></pre></div>
+  <p><strong>Hit rate</strong> = hits ÷ (hits + misses). Above about 80% means the cache is doing its job. If it's low, your TTLs are too short or your keys include something that changes on every request (like a timestamp).</p>
+
+  <h3>13.9 Managed Redis options</h3>
+  <table>
+    <tr><th>Option</th><th>Notes</th></tr>
+    <tr><td><strong>AWS ElastiCache</strong> (Redis OSS / Valkey)</td><td>Pick <em>Serverless</em> or a small node like <code>cache.t4g.micro</code>. Put it in the same VPC as your app. Its security group should allow 6379 only from the app's security group. It's never public.</td></tr>
+    <tr><td><strong>Upstash</strong></td><td>Serverless and priced per request, with a free tier. It also has an HTTP API (<code>@upstash/redis</code>), which makes it the usual choice from <strong>Cloudflare Workers</strong> and Lambda.</td></tr>
+    <tr><td><strong>Cloudflare KV</strong></td><td>Not Redis, but for Workers it fills the same "cache this for N seconds" role: <code>await c.env.KV.put(key, json, { expirationTtl: 300 })</code>. It's eventually consistent: updates can take up to about a minute to reach every location.</td></tr>
+  </table>
+
+  <div class="callout verify">
+    <div class="callout-title">✅ Check</div>
+    <p>The second request is noticeably faster than the first. <code>redis-cli TTL</code> shows a countdown. After you update a product, the next GET shows the new value right away. With Redis stopped (<code>sudo systemctl stop redis-server</code>), the site <em>still works</em>, just slower. Start Redis again afterwards.</p>
+  </div>
+</section>
+
+<!-- STEP 14 -->
+<section id="step-14">
+  <div class="step-head"><div class="step-num">14</div><h2>CDN &amp; HTTP caching</h2><label class="done-toggle"><input type="checkbox" data-step="14"> Mark done</label></div>
+  <p class="goal">Goal: serve your files, and safe-to-share API responses, from CDN servers close to each user, so many requests never reach your server at all.</p>
+
+  <h3>14.1 The layers of caching</h3>
+  <p>A request can be answered at any of these layers. The higher up, the faster it is and the less work your server does:</p>
+  <div class="diagram">
+    <div class="d-row"><div class="d-box b1"><b>1 · Browser cache</b>on the user's device · 0 ms · private to that user</div></div>
+    <div class="d-arrow">↓ miss</div>
+    <div class="d-row"><div class="d-box b2"><b>2 · CDN edge</b>Cloudflare / CloudFront, in a city near the user · ~10–30 ms · <em>shared by everyone</em></div></div>
+    <div class="d-arrow">↓ miss</div>
+    <div class="d-row"><div class="d-box b3"><b>3 · Your server</b>Caddy → app → <b style="display:inline">Redis</b> (step 13) → Postgres · 50–300 ms</div></div>
+  </div>
+  <p>Layers 1 and 2 are controlled by <strong>one HTTP response header: <code>Cache-Control</code></strong>. Your server sends it, and browsers and CDNs follow it.</p>
+
+  <h3>14.2 Cache-Control, explained</h3>
+  <table>
+    <tr><th>Directive</th><th>Meaning</th></tr>
+    <tr><td><code>public</code></td><td>Anyone may cache it, including shared CDNs.</td></tr>
+    <tr><td><code>private</code></td><td>Only the user's own browser may cache it. CDNs must not.</td></tr>
+    <tr><td><code>no-store</code></td><td>Don't cache it anywhere. Use for anything sensitive.</td></tr>
+    <tr><td><code>no-cache</code></td><td>Confusingly named: it <em>may</em> be stored, but must be re-checked with the server every time (cheap if unchanged, thanks to ETags).</td></tr>
+    <tr><td><code>max-age=N</code></td><td>Fresh for N seconds (browser <em>and</em> CDN).</td></tr>
+    <tr><td><code>s-maxage=N</code></td><td>Overrides <code>max-age</code> for <strong>shared caches (CDNs) only</strong>. This lets you cache longer at the edge than in browsers.</td></tr>
+    <tr><td><code>stale-while-revalidate=N</code></td><td>After it expires, serve the old copy for up to N more seconds while fetching a fresh one in the background, so users never wait for the refresh.</td></tr>
+    <tr><td><code>immutable</code></td><td>This URL's content will never change; don't even re-check it. For hashed assets only.</td></tr>
+  </table>
+
+  <h3>14.3 A caching policy for each kind of response</h3>
+  <table>
+    <tr><th>What</th><th>Cache-Control</th><th>Why</th></tr>
+    <tr><td>Hashed assets <code>/assets/*.js|css</code></td><td><code>public, max-age=31536000, immutable</code></td><td>The filename changes when the content does</td></tr>
+    <tr><td>Images, fonts without hashes</td><td><code>public, max-age=86400</code></td><td>1 day; long enough to help, short enough to update</td></tr>
+    <tr><td><code>index.html</code></td><td><code>no-cache</code></td><td>Must always point to the newest assets after a deploy</td></tr>
+    <tr><td>Public API data that's identical for everyone (product list, blog posts)</td><td><code>public, max-age=60, s-maxage=300, stale-while-revalidate=600</code></td><td>Browser: 1 min. CDN: 5 min, then a background refresh</td></tr>
+    <tr><td><strong>Anything per-user or logged-in</strong> (<code>/api/me</code>, cart, dashboard)</td><td><code>private, no-store</code></td><td><strong>A shared cache must never store it</strong></td></tr>
+    <tr><td>POST / PUT / DELETE responses</td><td><code>no-store</code></td><td>CDNs don't cache these anyway; be explicit</td></tr>
+  </table>
+
+  <div class="callout danger">
+    <div class="callout-title">🚨 The one mistake that matters</div>
+    <p>If a CDN caches a <em>personalised</em> response, for example <code>/api/me</code> with <code>public</code> or a cache-everything rule, the <strong>next visitor gets the previous user's data</strong>. That includes names, emails and orders. Real companies have leaked customer data this way. Make <code>no-store</code> the default for your API, and opt in to caching route by route.</p>
+  </div>
+
+  <h4>Setting the headers in Express</h4>
+  <div class="code"><div class="code-head"><span>src/index.js</span></div><pre><code><span class="c">// 1. Safe default: no API response is cacheable unless a route says so.
+//    Put this BEFORE your routes.</span>
+app.use(<span class="s">"/api"</span>, (req, res, next) =&gt; {
+  res.set(<span class="s">"Cache-Control"</span>, <span class="s">"no-store"</span>);
+  next();
+});
+
+<span class="c">// 2. Opt in for public, same-for-everyone data</span>
+app.get(<span class="s">"/api/public/products"</span>, <span class="k">async</span> (req, res) =&gt; {
+  <span class="k">const</span> products = <span class="k">await</span> cached(<span class="s">"v1:products:list"</span>, 300, loadProducts);  <span class="c">// Redis (step 13)</span>
+  res.set(<span class="s">"Cache-Control"</span>, <span class="s">"public, max-age=60, s-maxage=300, stale-while-revalidate=600"</span>);
+  res.json(products);
+});
+
+<span class="c">// 3. Per-user routes keep the no-store default: no extra code needed</span>
+app.get(<span class="s">"/api/me"</span>, requireAuth, (req, res) =&gt; res.json(req.user));</code></pre></div>
+  <p>Putting cacheable endpoints under a <code>/api/public/</code> prefix makes the CDN rule in the next section simple and hard to get wrong. Express also sends an <strong>ETag</strong> automatically, so when a browser re-checks, an unchanged response comes back as a tiny <code>304 Not Modified</code>.</p>
+  <p>FastAPI equivalent: <code>return JSONResponse(data, headers={"Cache-Control": "public, max-age=60, s-maxage=300"})</code>.</p>
+
+  <h3>14.4 CDN option A: Cloudflare in front of your server</h3>
+  <ol>
+    <li>Your DNS records are <strong>Proxied</strong> (orange cloud), with SSL mode <strong>Full (strict)</strong>. See <a href="#cf-proxy">Proxying your VPS</a>.</li>
+    <li>Out of the box, Cloudflare already caches <strong>static file types</strong> (<code>.js</code>, <code>.css</code>, images, fonts…) and follows your <code>Cache-Control</code> headers. It does <strong>not</strong> cache HTML or JSON by default. That's the safe default, and your assets are already covered.</li>
+    <li>To cache your public API endpoints too, go to <em>Caching → Cache Rules → Create rule</em>:
+      <ul>
+        <li><strong>Rule name:</strong> Cache public API</li>
+        <li><strong>When:</strong> URI Path <em>starts with</em> <code>/api/public/</code> and Request Method <em>equals</em> <code>GET</code></li>
+        <li><strong>Then:</strong> Cache eligibility → <em>Eligible for cache</em></li>
+        <li><strong>Edge TTL:</strong> <em>Use cache-control header if present, bypass cache if not</em></li>
+        <li><strong>Browser TTL:</strong> <em>Respect origin</em></li>
+      </ul>
+    </li>
+    <li>For everything else under <code>/api/</code>, use a bypass rule that <strong>excludes</strong> the public prefix: URI Path <em>starts with</em> <code>/api/</code> <strong>and</strong> URI Path <em>does not start with</em> <code>/api/public/</code> → <em>Bypass cache</em>. (When several Cache Rules match, later ones can override earlier ones. Writing the rules so they never overlap means their order doesn't matter.)</li>
+    <li>Make sure public endpoints don't send <code>Set-Cookie</code>. Cloudflare won't cache responses that set cookies, and you wouldn't want it to.</li>
+  </ol>
+
+  <h4>Check it's working</h4>
+  <div class="code"><div class="code-head"><span>your computer</span></div><pre><code>curl -sI https://myapp.com/api/public/products | grep -iE 'cf-cache-status|cache-control|age'
+<span class="c"># 1st request → cf-cache-status: MISS</span>
+<span class="c"># 2nd request → cf-cache-status: HIT     age: 3</span>
+
+curl -sI https://myapp.com/api/me | grep -i cf-cache-status
+<span class="c"># → BYPASS or DYNAMIC   (never HIT!)</span></code></pre></div>
+  <table>
+    <tr><th><code>cf-cache-status</code></th><th>Meaning</th></tr>
+    <tr><td><code>HIT</code></td><td>Served from Cloudflare's cache. Your server wasn't contacted.</td></tr>
+    <tr><td><code>MISS</code></td><td>Not in cache yet. Fetched from your server and (if allowed) stored.</td></tr>
+    <tr><td><code>EXPIRED</code> / <code>REVALIDATED</code></td><td>Was cached but stale; re-fetched or confirmed unchanged.</td></tr>
+    <tr><td><code>BYPASS</code></td><td>A rule or header (e.g. <code>no-store</code>, <code>Set-Cookie</code>) prevented caching.</td></tr>
+    <tr><td><code>DYNAMIC</code></td><td>Not eligible for caching (HTML/JSON with no Cache Rule). Normal for private routes.</td></tr>
+  </table>
+
+  <h4>Purging after a change</h4>
+  <p>The dashboard has <em>Caching → Configuration → Purge Cache</em>. To automate it from your deploy script or after a data update, create an API token with <strong>Zone → Cache Purge</strong> permission and find your Zone ID on the domain's overview page:</p>
+  <div class="code"><div class="code-head"><span>purge specific URLs</span></div><pre><code>curl -X POST "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/purge_cache" \
+  -H "Authorization: Bearer $CF_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data '{"files":["https://myapp.com/api/public/products"]}'
+
+<span class="c"># or everything (use sparingly: the next requests all hit your server)</span>
+<span class="c">#  --data '{"purge_everything":true}'</span></code></pre></div>
+  <p>With short <code>s-maxage</code> values (a few minutes), you'll rarely need to purge. The content refreshes on its own.</p>
+
+  <h3>14.5 CDN option B: AWS CloudFront</h3>
+  <p>If you followed <a href="#aws-s3">S3 + CloudFront</a>, the frontend is already on a CDN. To cache API responses too, use one CloudFront behavior per path, each with a <strong>cache policy</strong>:</p>
+  <table>
+    <tr><th>Path pattern</th><th>Origin</th><th>Cache policy</th></tr>
+    <tr><td><code>/api/public/*</code></td><td>API server</td><td>A <strong>custom policy</strong>: min TTL 0, default TTL 0, max TTL 86400. CloudFront then uses your <code>s-maxage</code>/<code>max-age</code>, and doesn't cache responses without them. Include only the query strings that change the result.</td></tr>
+    <tr><td><code>/api/*</code></td><td>API server</td><td><strong>CachingDisabled</strong> + origin request policy <em>AllViewerExceptHostHeader</em></td></tr>
+    <tr><td>Default (<code>*</code>)</td><td>S3 bucket</td><td><strong>CachingOptimized</strong></td></tr>
+  </table>
+  <p>CloudFront matches behaviors in order, so put <code>/api/public/*</code> <em>above</em> <code>/api/*</code>. Check with <code>curl -sI … | grep -iE 'x-cache|age'</code>: you'll see <code>x-cache: Miss from cloudfront</code>, then <code>Hit from cloudfront</code>. Purge with <code>aws cloudfront create-invalidation --paths "/api/public/*"</code> (the first 1,000 paths per month are free).</p>
+
+  <h3>14.6 Bonus: caching on your own server (Nginx micro-caching)</h3>
+  <p>Without a CDN, Nginx can cache public API responses for a few seconds. That's enough to absorb a traffic spike, because a thousand requests per second become one request per second to your app. (Caddy needs a plugin, <code>cache-handler</code>, for this; Nginx has it built in.)</p>
+  <div class="code"><div class="code-head"><span>/etc/nginx/sites-available/myapp (additions)</span></div><pre><code><span class="c"># at the top of the file, outside "server { }"</span>
+proxy_cache_path /var/cache/nginx/api levels=1:2 keys_zone=api_cache:10m
+                 max_size=200m inactive=10m use_temp_path=off;
+
+server {
+    <span class="c"># … existing config …</span>
+
+    location /api/public/ {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_cache api_cache;
+        proxy_cache_valid 200 10s;                      <span class="c"># fallback if no Cache-Control</span>
+        proxy_cache_use_stale error timeout updating;   <span class="c"># serve stale if the app is down</span>
+        proxy_cache_lock on;                            <span class="c"># only one request refills a missing entry</span>
+        add_header X-Cache-Status $upstream_cache_status;
+    }
+}</code></pre></div>
+  <p>Nginx follows your app's <code>Cache-Control</code> and won't cache responses marked <code>private</code>/<code>no-store</code> or responses that set cookies. <code>proxy_cache_use_stale</code> also means a brief app crash doesn't take these pages down.</p>
+
+  <h3>14.7 Which cache for which problem?</h3>
+  <table>
+    <tr><th>Problem</th><th>Best tool</th></tr>
+    <tr><td>JS/CSS/images are slow for faraway users</td><td>CDN + <code>immutable</code> assets</td></tr>
+    <tr><td>Same public JSON requested thousands of times</td><td>CDN with <code>s-maxage</code> (plus Redis behind it)</td></tr>
+    <tr><td>Slow query whose results are per-user</td><td>Redis with user ID in the key (never the CDN)</td></tr>
+    <tr><td>Slow third-party API (weather, exchange rates)</td><td>Redis with a TTL matching how often the data changes</td></tr>
+    <tr><td>Traffic spike on a few public pages, no CDN</td><td>Nginx micro-cache</td></tr>
+    <tr><td>Repeat visits re-downloading everything</td><td>Correct <code>Cache-Control</code> + ETags (browser cache)</td></tr>
+  </table>
+
+  <div class="callout verify">
+    <div class="callout-title">✅ Check</div>
+    <p>Assets show <code>cf-cache-status: HIT</code> (or <code>x-cache: Hit from cloudfront</code>). <code>/api/public/…</code> goes MISS → HIT. <code>/api/me</code> <strong>never</strong> shows HIT, even when you request it twice from two different browsers. After a deploy, a normal refresh shows the new version (<code>index.html</code> is <code>no-cache</code>).</p>
+  </div>
+</section>
+
 <!-- ================= PART 2: AWS ================= -->
 <div class="part-label">Part 2</div>
 <section id="aws">
@@ -2022,7 +2416,7 @@ app.post(<span class="s">"/api/notes"</span>, <span class="k">async</span> (c) =
     <li>SSL/TLS → Overview → mode <strong>Full (strict)</strong>. <em>Flexible</em> causes redirect loops with Caddy; <em>Full</em> without strict doesn't verify your certificate.</li>
     <li>Switch the <code>A</code> records to the orange cloud.</li>
     <li>SSL/TLS → Edge Certificates → turn on <strong>Always Use HTTPS</strong>.</li>
-    <li>Caching → Cache Rules: add a rule to <em>bypass cache</em> for <code>URI Path starts with /api/</code>, so API responses never get cached.</li>
+    <li>Caching → Cache Rules: add a rule to <em>bypass cache</em> for <code>URI Path starts with /api/</code>, so API responses never get cached. (To cache selected public endpoints, see <a href="#step-14">step 14</a>.)</li>
   </ol>
   <h4>Getting the real visitor IP</h4>
   <p>Behind the proxy, every request appears to come from a Cloudflare IP. Cloudflare sends the real one in the <code>CF-Connecting-IP</code> header. Tell Caddy to trust Cloudflare's IP ranges (in the global options block at the very top of the Caddyfile):</p>
@@ -2113,6 +2507,10 @@ sudo systemctl status cloudflared</code></pre></div>
     <tr><td>Build gets "Killed"</td><td>Out of memory</td><td>Add swap (<a href="#step-2">step 2.6</a>) or build in CI</td></tr>
     <tr><td>Permission denied (publickey)</td><td>Wrong user or key</td><td><code>ssh -v deploy@IP</code>; EC2 uses <code>ubuntu</code>; <code>chmod 600 ~/.ssh/authorized_keys</code></td></tr>
     <tr><td>"Address already in use"</td><td>Another process holds the port</td><td><code>sudo ss -tlnp | grep :3000</code>, then stop it</td></tr>
+    <tr><td><strong>One user sees another user's data</strong></td><td>A personalised response was cached by the CDN or under a shared Redis key</td><td><strong>Urgent:</strong> purge the CDN cache, mark the route <code>private, no-store</code>, and include the user ID in Redis keys (<a href="#step-14">step 14</a>)</td></tr>
+    <tr><td>Users see old data after an update</td><td>A cache wasn't invalidated</td><td><code>redis-cli DEL key</code> or delete the key in your update code; purge the CDN; shorten TTLs</td></tr>
+    <tr><td><code>cf-cache-status: DYNAMIC</code> on an API you meant to cache</td><td>Cloudflare doesn't cache JSON by default, or the response sets a cookie</td><td>Add a Cache Rule (<a href="#step-14">step 14.4</a>); remove <code>Set-Cookie</code> from public endpoints</td></tr>
+    <tr><td>App crashes with <code>ECONNREFUSED 127.0.0.1:6379</code></td><td>Redis is down or not installed</td><td><code>systemctl status redis-server</code>; make cache errors non-fatal (step 13.4)</td></tr>
     <tr><td>Disk full</td><td>Logs, old Docker images, backups</td><td><code>df -h</code>, <code>sudo du -sh /var/* | sort -h</code>, <code>docker system prune</code>, <code>sudo journalctl --vacuum-size=200M</code></td></tr>
   </table>
   <div class="callout tip">
@@ -2136,6 +2534,8 @@ sudo systemctl status cloudflared</code></pre></div>
     <li><input type="checkbox" data-sec="10"><span>MFA on your cloud, DNS registrar and GitHub accounts</span></li>
     <li><input type="checkbox" data-sec="11"><span>Optional: <code>fail2ban</code> to block repeated SSH login attempts (<code>sudo apt install fail2ban</code>)</span></li>
     <li><input type="checkbox" data-sec="12"><span>Optional: uptime monitoring (UptimeRobot, Better Stack, or Uptime Kuma self-hosted)</span></li>
+    <li><input type="checkbox" data-sec="13"><span>Redis listens only on localhost (or the private Docker network) and has a password</span></li>
+    <li><input type="checkbox" data-sec="14"><span>Logged-in / personalised API responses send <code>Cache-Control: private, no-store</code> and are never cached by the CDN</span></li>
   </ul>
 </section>
 
@@ -2203,6 +2603,11 @@ sudo systemctl status cloudflared</code></pre></div>
     <tr><td>Staging</td><td>A private copy of production for testing changes before real users see them.</td></tr>
     <tr><td>Health check</td><td>An endpoint (e.g. <code>/api/health</code>) that monitors and load balancers call to see if the app is working.</td></tr>
     <tr><td>Origin</td><td>(1) Your actual server behind a CDN. (2) In browsers: scheme + domain + port, which is what CORS compares.</td></tr>
+    <tr><td>Redis</td><td>An in-memory key-value store. Very fast; used for caching, sessions, rate limits and job queues.</td></tr>
+    <tr><td>Cache hit / miss</td><td>Hit: the answer was already in the cache. Miss: it had to be fetched from the slower source (and is usually stored for next time).</td></tr>
+    <tr><td>Invalidation / purge</td><td>Removing an entry from a cache so the next request fetches fresh data.</td></tr>
+    <tr><td>Edge</td><td>A CDN's servers in cities around the world, close to your users.</td></tr>
+    <tr><td>Cache-Control</td><td>The HTTP header that tells browsers and CDNs whether, and for how long, a response may be cached.</td></tr>
   </table>
 </section>
 
@@ -2264,7 +2669,7 @@ sudo systemctl status cloudflared</code></pre></div>
   });
 
   // ---------- progress ----------
-  const TOTAL = 12;
+  const TOTAL = 14;
   const KEY = "shg-progress";
   const state = JSON.parse(localStorage.getItem(KEY) || "{}");
   const stepBoxes = document.querySelectorAll("input[data-step]");
