@@ -177,6 +177,21 @@ footer{margin-top:80px;color:var(--fg-soft);font-size:13px;border-top:1px solid 
     <a href="#step-13" data-step="13">13. Redis cache <span class="tick">✓</span></a>
     <a href="#step-14" data-step="14">14. CDN &amp; HTTP caching <span class="tick">✓</span></a>
 
+    <div class="nav-group">Docker in depth</div>
+    <a href="#docker">Overview</a>
+    <a href="#docker-concepts">Core concepts</a>
+    <a href="#docker-ways">10 ways to use Docker</a>
+    <a href="#docker-dev">Local development</a>
+    <a href="#docker-dockerfile">Writing great Dockerfiles</a>
+    <a href="#docker-compose">Compose for production</a>
+    <a href="#docker-registry">Registry-based deploys</a>
+    <a href="#docker-platforms">PaaS &amp; managed platforms</a>
+    <a href="#docker-ci">Docker in CI &amp; one-off tasks</a>
+    <a href="#docker-data">Data, volumes &amp; networks</a>
+    <a href="#docker-security">Security</a>
+    <a href="#docker-debug">Debugging</a>
+    <a href="#docker-mistakes">Common mistakes</a>
+
     <div class="nav-group">Part 2 · AWS</div>
     <a href="#aws">The AWS map</a>
     <a href="#aws-account">Account &amp; CLI setup</a>
@@ -228,7 +243,7 @@ footer{margin-top:80px;color:var(--fg-soft);font-size:13px;border-top:1px solid 
     <tr><td>Serves files &amp; handles HTTPS</td><td>Caddy or Nginx</td><td><a href="#step-7">7</a></td></tr>
     <tr><td>Database &amp; backups</td><td>PostgreSQL + a cron job</td><td><a href="#step-8">8</a></td></tr>
     <tr><td>"Push to deploy" &amp; instant rollback</td><td>A deploy script + GitHub Actions + release folders</td><td><a href="#step-9">9</a></td></tr>
-    <tr><td>Reproducible builds</td><td>Docker &amp; Docker Compose</td><td><a href="#step-10">10</a></td></tr>
+    <tr><td>Reproducible builds</td><td>Docker &amp; Docker Compose</td><td><a href="#step-10">10</a>, <a href="#docker">deep dive</a></td></tr>
     <tr><td>Status alerts &amp; logs dashboard</td><td>Uptime monitor, Sentry, journalctl</td><td><a href="#step-11">11</a></td></tr>
     <tr><td>Preview deployments</td><td>A password-protected staging site</td><td><a href="#step-12">12</a></td></tr>
     <tr><td>Fast responses under load (data cache)</td><td>Redis</td><td><a href="#step-13">13</a></td></tr>
@@ -1523,6 +1538,11 @@ docker compose logs -f api         <span class="c"># logs</span></code></pre></d
     <p><code>docker compose ps</code> shows all three services as <em>running</em> (db as <em>healthy</em>). The site works over HTTPS. After <code>sudo reboot</code>, everything comes back on its own (thanks to <code>restart: unless-stopped</code>).</p>
   </div>
 
+  <div class="callout info">
+    <div class="callout-title">ℹ️ Want to go further with Docker?</div>
+    <p>This step is the quick version. The <a href="#docker">Docker in depth</a> part covers ten different ways to use Docker (local development only, building in CI and pushing to a registry, managed platforms…), a production Compose file with migrations, workers and log limits, and the most common Docker mistakes.</p>
+  </div>
+
   <details>
     <summary>Want a Vercel-like dashboard on your own server?</summary>
     <p>Self-hosted platforms such as <strong>Coolify</strong>, <strong>Dokploy</strong>, <strong>CapRover</strong> and <strong>Dokku</strong> run on your VPS and give you git-push deploys, automatic HTTPS, databases and a web UI. Try them <em>after</em> working through this guide, so you know what they're doing behind the scenes.</p>
@@ -2047,6 +2067,877 @@ server {
     <div class="callout-title">✅ Check</div>
     <p>Assets show <code>cf-cache-status: HIT</code> (or <code>x-cache: Hit from cloudfront</code>). <code>/api/public/…</code> goes MISS → HIT. <code>/api/me</code> <strong>never</strong> shows HIT, even when you request it twice from two different browsers. After a deploy, a normal refresh shows the new version (<code>index.html</code> is <code>no-cache</code>).</p>
   </div>
+</section>
+
+<!-- ================= DOCKER IN DEPTH ================= -->
+<div class="part-label">Docker in depth</div>
+<section id="docker">
+  <h2 style="margin-top:10px;border:none">Docker for this project</h2>
+  <p class="lead" style="font-size:17px">Docker is useful at <em>every</em> stage of a project, not only for deploying: running Postgres on your laptop, running tests in CI, shipping to a VPS, or handing the same image to Cloud Run or ECS. This part explains how it works and the different ways you can use it.</p>
+
+  <h3>Why bother?</h3>
+  <table>
+    <tr><th>Without Docker</th><th>With Docker</th></tr>
+    <tr><td>"Works on my machine": Node 20 on the laptop, Node 22 on the server</td><td>The image contains the exact runtime, so it's identical everywhere</td></tr>
+    <tr><td>Installing Postgres, Redis and their configs by hand on each machine</td><td><code>docker compose up</code> starts them all with known settings</td></tr>
+    <tr><td>Rebuilding a dead server means redoing steps 4–8</td><td>Copy <code>compose.yaml</code> + <code>.env</code>, run one command</td></tr>
+    <tr><td>Rollback means rebuilding old code</td><td>Run the previous image tag, which takes seconds</td></tr>
+    <tr><td>Moving to another host means a new setup guide</td><td>Every major platform runs the same image</td></tr>
+  </table>
+  <p>The costs: something new to learn, images to keep updated, a few hundred MB of disk per image, and one more layer between you and your app when debugging. For a single small app, systemd (Part 1) is perfectly fine. Docker pays off once you have several services, several environments, or plans to use a managed platform.</p>
+</section>
+
+<section id="docker-concepts">
+  <h3 style="font-size:24px;margin-top:48px">Core concepts</h3>
+  <div class="diagram">
+    <div class="d-row">
+      <div class="d-box b1"><b>Dockerfile</b>recipe: base image + steps</div>
+      <div class="d-box b2"><b>Image</b>built, read-only, tagged<br><code>myapp-api:3f9c2a1</code></div>
+      <div class="d-box b3"><b>Registry</b>GHCR · Docker Hub · ECR</div>
+      <div class="d-box b4"><b>Container</b>a running instance of an image</div>
+    </div>
+    <div class="d-arrow">docker build → docker push → docker pull → docker run</div>
+    <div class="d-row">
+      <div class="d-box"><b>Volume</b>persistent data that outlives containers</div>
+      <div class="d-box"><b>Network</b>containers find each other by service name</div>
+      <div class="d-box"><b>Compose</b>YAML describing all of the above together</div>
+    </div>
+  </div>
+
+  <table>
+    <tr><th>Term</th><th>Analogy</th><th>Key fact</th></tr>
+    <tr><td><strong>Image</strong></td><td>A class / an installer</td><td>Immutable. Built in <em>layers</em>, one per Dockerfile instruction, and unchanged layers are reused from cache.</td></tr>
+    <tr><td><strong>Container</strong></td><td>An object / a running install</td><td>Disposable. Anything written inside it is <strong>lost</strong> when it's removed, unless it's on a volume.</td></tr>
+    <tr><td><strong>Tag</strong></td><td>A version label</td><td><code>latest</code> is just a name, not "the newest". Use git SHAs or version numbers for anything you deploy.</td></tr>
+    <tr><td><strong>Volume</strong></td><td>An external hard drive</td><td>Where Postgres, Redis and uploads keep their data.</td></tr>
+    <tr><td><strong>Port publishing</strong></td><td>A door in the wall</td><td><code>"80:80"</code> = host port 80 → container port 80. Without it, only other containers can reach the service.</td></tr>
+  </table>
+
+  <h4>Containers vs virtual machines</h4>
+  <table>
+    <tr><th></th><th>Virtual machine (your VPS)</th><th>Container</th></tr>
+    <tr><td>Includes</td><td>A whole OS with its own kernel</td><td>Just the app + its files; shares the host's kernel</td></tr>
+    <tr><td>Starts in</td><td>Tens of seconds to minutes</td><td>Under a second</td></tr>
+    <tr><td>Size</td><td>Gigabytes</td><td>Tens to hundreds of MB</td></tr>
+    <tr><td>Isolation</td><td>Strong (hardware-level)</td><td>Good, but weaker. Don't treat containers as a hard security boundary.</td></tr>
+  </table>
+  <p>They work together: you rent a <em>VM</em> (the VPS) and run <em>containers</em> on it.</p>
+
+  <h4>Installing Docker</h4>
+  <table>
+    <tr><th>Machine</th><th>Install</th></tr>
+    <tr><td>Linux server / Linux laptop</td><td><code>curl -fsSL https://get.docker.com | sudo sh</code>, then <code>sudo usermod -aG docker $USER</code> and log in again</td></tr>
+    <tr><td>macOS</td><td>Docker Desktop, or <strong>OrbStack</strong> (lighter and faster)</td></tr>
+    <tr><td>Windows</td><td>Docker Desktop with the WSL 2 backend. Keep your code <em>inside</em> WSL (<code>~/code</code>), not on <code>C:\</code>, or file access will be very slow.</td></tr>
+  </table>
+  <p><strong>On servers, cap container log sizes straight away.</strong> By default Docker keeps container logs forever and they can fill the disk:</p>
+  <div class="code"><div class="code-head"><span>/etc/docker/daemon.json</span></div><pre><code>{
+  <span class="s">"log-driver"</span>: <span class="s">"json-file"</span>,
+  <span class="s">"log-opts"</span>: { <span class="s">"max-size"</span>: <span class="s">"10m"</span>, <span class="s">"max-file"</span>: <span class="s">"3"</span> }
+}</code></pre></div>
+  <div class="code"><div class="code-head"><span>server</span></div><pre><code>sudo systemctl restart docker     <span class="c"># applies to containers created from now on</span>
+docker compose up -d --force-recreate   <span class="c"># recreate existing ones so they pick it up</span></code></pre></div>
+</section>
+
+<section id="docker-ways">
+  <h3 style="font-size:24px;margin-top:48px">10 ways to use Docker in this project</h3>
+  <p>You don't have to go all in. Each row below is a separate way to use Docker, and most projects combine a few of them. A common path is <strong>1 → 8 → 3 → 4</strong>.</p>
+  <table>
+    <tr><th>#</th><th>Way</th><th>Where Docker runs</th><th>Best for</th><th>Effort</th></tr>
+    <tr><td>1</td><td><a href="#docker-dev">Only the databases, locally</a></td><td>Laptop</td><td>Everyone: the easiest first step</td><td>⭐</td></tr>
+    <tr><td>2</td><td><a href="#docker-dev-full">Whole dev environment in containers</a></td><td>Laptop</td><td>Teams; matching dev and prod</td><td>⭐⭐</td></tr>
+    <tr><td>3</td><td><a href="#docker-compose">Build &amp; run with Compose on the server</a></td><td>VPS</td><td>Simple production (step 10)</td><td>⭐⭐</td></tr>
+    <tr><td>4</td><td><a href="#docker-registry">Build in CI → registry → server pulls</a></td><td>CI + VPS</td><td>Production with fast rollbacks</td><td>⭐⭐⭐</td></tr>
+    <tr><td>5</td><td><a href="#docker-hybrid">Hybrid: data services in Docker, app on systemd</a></td><td>VPS</td><td>Keeping Part 1 but getting easy DB/Redis</td><td>⭐</td></tr>
+    <tr><td>6</td><td><a href="#docker-platforms">Self-hosted PaaS (Coolify, Dokploy, Kamal)</a></td><td>VPS</td><td>A Vercel-style experience on your own server</td><td>⭐⭐</td></tr>
+    <tr><td>7</td><td><a href="#docker-managed">Managed container platforms</a></td><td>Cloud</td><td>No servers to maintain; autoscaling</td><td>⭐⭐</td></tr>
+    <tr><td>8</td><td><a href="#docker-ci">Test databases in CI</a></td><td>GitHub Actions</td><td>Realistic integration tests</td><td>⭐</td></tr>
+    <tr><td>9</td><td><a href="#docker-oneoff">One-off tools &amp; tasks</a></td><td>Anywhere</td><td>Migrations, scripts, CLIs without installing them</td><td>⭐</td></tr>
+    <tr><td>10</td><td><a href="#docker-k8s">Kubernetes</a></td><td>Cluster</td><td>Many services, many machines, big teams</td><td>⭐⭐⭐⭐⭐</td></tr>
+  </table>
+</section>
+
+<section id="docker-dev">
+  <h3 style="font-size:24px;margin-top:48px">Way 1: Docker only for the databases (local dev)</h3>
+  <p>Your app runs normally (<code>npm run dev</code>, with hot reload and your debugger), while Postgres and Redis run in containers. You don't need to install a database on your laptop, every developer gets the same versions, and you can wipe everything with one command.</p>
+  <div class="code"><div class="code-head"><span>compose.dev.yaml (repo root)</span></div><pre><code><span class="k">services:</span>
+  <span class="k">db:</span>
+    <span class="k">image:</span> postgres:17
+    <span class="k">environment:</span>
+      <span class="k">POSTGRES_USER:</span> myapp
+      <span class="k">POSTGRES_PASSWORD:</span> devpassword
+      <span class="k">POSTGRES_DB:</span> myapp
+    <span class="k">ports:</span>
+      - <span class="s">"127.0.0.1:5432:5432"</span>      <span class="c"># reachable from your laptop only</span>
+    <span class="k">volumes:</span>
+      - devpgdata:/var/lib/postgresql/data
+
+  <span class="k">redis:</span>
+    <span class="k">image:</span> redis:7-alpine
+    <span class="k">ports:</span>
+      - <span class="s">"127.0.0.1:6379:6379"</span>
+
+  <span class="k">mailpit:</span>                         <span class="c"># catches every email your app sends, for a web inbox</span>
+    <span class="k">image:</span> axllent/mailpit
+    <span class="k">ports:</span>
+      - <span class="s">"127.0.0.1:8025:8025"</span>      <span class="c"># inbox UI → http://localhost:8025</span>
+      - <span class="s">"127.0.0.1:1025:1025"</span>      <span class="c"># SMTP: point your app's mailer here</span>
+
+<span class="k">volumes:</span>
+  <span class="k">devpgdata:</span></code></pre></div>
+  <div class="code"><div class="code-head"><span>your computer</span></div><pre><code>docker compose -f compose.dev.yaml up -d     <span class="c"># start in the background</span>
+<span class="c"># backend/.env:</span>
+<span class="c">#   DATABASE_URL=postgres://myapp:devpassword@localhost:5432/myapp</span>
+<span class="c">#   REDIS_URL=redis://localhost:6379</span>
+cd backend &amp;&amp; npm run dev
+
+docker compose -f compose.dev.yaml down       <span class="c"># stop (data kept)</span>
+docker compose -f compose.dev.yaml down -v    <span class="c"># stop and WIPE the dev database</span></code></pre></div>
+  <div class="callout tip">
+    <div class="callout-title">💡 Tip: run the same major Postgres version as production</div>
+    <p>If production runs Postgres 17, use <code>postgres:17</code> locally too. Version mismatches cause subtle bugs and backup files that won't restore.</p>
+  </div>
+</section>
+
+<section id="docker-dev-full">
+  <h3 style="font-size:24px;margin-top:48px">Way 2: The whole dev environment in containers</h3>
+  <p>The app runs in containers as well, with your source code <strong>bind-mounted</strong> so edits trigger hot reload. A new developer only needs Docker and <code>git clone</code>: no Node, Python or Postgres to install.</p>
+  <div class="code"><div class="code-head"><span>compose.dev.yaml (additions)</span></div><pre><code><span class="k">services:</span>
+  <span class="c"># …db, redis, mailpit from Way 1…</span>
+
+  <span class="k">api:</span>
+    <span class="k">build:</span>
+      <span class="k">context:</span> ./backend
+      <span class="k">target:</span> dev                   <span class="c"># the "dev" stage of the Dockerfile below</span>
+    <span class="k">volumes:</span>
+      - ./backend:/app                 <span class="c"># your code, live</span>
+      - /app/node_modules              <span class="c"># keep the container's own node_modules</span>
+    <span class="k">environment:</span>
+      <span class="k">DATABASE_URL:</span> postgres://myapp:devpassword@db:5432/myapp
+      <span class="k">REDIS_URL:</span> redis://redis:6379
+      <span class="k">HOST:</span> 0.0.0.0
+    <span class="k">ports:</span>
+      - <span class="s">"127.0.0.1:3000:3000"</span>
+    <span class="k">depends_on:</span> [db, redis]
+
+  <span class="k">web:</span>
+    <span class="k">image:</span> node:22-alpine
+    <span class="k">working_dir:</span> /app
+    <span class="k">command:</span> sh -c <span class="s">"npm install &amp;&amp; npm run dev -- --host 0.0.0.0"</span>
+    <span class="k">volumes:</span>
+      - ./frontend:/app
+      - /app/node_modules
+    <span class="k">environment:</span>
+      <span class="k">API_URL:</span> http://api:3000           <span class="c"># used by the Vite proxy (below)</span>
+    <span class="k">ports:</span>
+      - <span class="s">"127.0.0.1:5173:5173"</span>
+    <span class="k">depends_on:</span> [api]</code></pre></div>
+  <p>Inside the <code>web</code> container, <code>localhost</code> is the web container itself, so the Vite proxy must point at the <code>api</code> <em>service name</em>:</p>
+  <div class="code"><div class="code-head"><span>frontend/vite.config.js</span></div><pre><code>server: {
+  proxy: { <span class="s">"/api"</span>: process.env.API_URL || <span class="s">"http://localhost:3000"</span> },
+},</code></pre></div>
+  <p>Start it with <code>docker compose -f compose.dev.yaml up --build</code> and open <code>http://localhost:5173</code>.</p>
+
+  <div class="callout why">
+    <div class="callout-title">🧠 Why the extra <code>/app/node_modules</code> line?</div>
+    <p>The bind mount <code>./backend:/app</code> replaces <code>/app</code> in the container with your folder, including your laptop's <code>node_modules</code>, which may be built for macOS or Windows. The extra anonymous volume <em>covers</em> that one subfolder, so the container keeps its own Linux-built packages. After changing <code>package.json</code>, rebuild with <code>up --build</code> and add <code>-V</code> (<code>--renew-anon-volumes</code>) so the volume gets fresh packages.</p>
+  </div>
+
+  <h4>Dev Containers (VS Code / JetBrains / Codespaces)</h4>
+  <p>A step further: the <em>editor itself</em> works inside a container. Add this file, then run "Reopen in Container":</p>
+  <div class="code"><div class="code-head"><span>.devcontainer/devcontainer.json</span></div><pre><code>{
+  <span class="s">"name"</span>: <span class="s">"myapp"</span>,
+  <span class="s">"image"</span>: <span class="s">"mcr.microsoft.com/devcontainers/javascript-node:22"</span>,
+  <span class="s">"features"</span>: { <span class="s">"ghcr.io/devcontainers/features/docker-in-docker:2"</span>: {} },
+  <span class="s">"forwardPorts"</span>: [3000, 5173],
+  <span class="s">"postCreateCommand"</span>: <span class="s">"cd backend &amp;&amp; npm ci &amp;&amp; cd ../frontend &amp;&amp; npm ci"</span>
+}</code></pre></div>
+  <p>The same file powers <strong>GitHub Codespaces</strong>, so you get a full dev environment in the browser.</p>
+</section>
+
+<section id="docker-hybrid">
+  <h3 style="font-size:24px;margin-top:48px">Way 5: Hybrid (data services in Docker, app on systemd)</h3>
+  <p>Keep the Part 1 setup (Caddy + systemd), but run Postgres and Redis in containers. Upgrading Postgres becomes changing an image tag, and you avoid version clashes with the OS packages.</p>
+  <div class="code"><div class="code-head"><span>~/infra/compose.yaml (server)</span></div><pre><code><span class="k">services:</span>
+  <span class="k">db:</span>
+    <span class="k">image:</span> postgres:17
+    <span class="k">restart:</span> unless-stopped
+    <span class="k">env_file:</span> .env
+    <span class="k">ports:</span>
+      - <span class="s">"127.0.0.1:5432:5432"</span>     <span class="c"># bound to localhost: the systemd app can reach it; the internet can't</span>
+    <span class="k">volumes:</span>
+      - pgdata:/var/lib/postgresql/data
+  <span class="k">redis:</span>
+    <span class="k">image:</span> redis:7-alpine
+    <span class="k">restart:</span> unless-stopped
+    <span class="k">command:</span> [<span class="s">"redis-server"</span>, <span class="s">"--requirepass"</span>, <span class="s">"${REDIS_PASSWORD}"</span>, <span class="s">"--maxmemory"</span>, <span class="s">"256mb"</span>, <span class="s">"--maxmemory-policy"</span>, <span class="s">"allkeys-lru"</span>]
+    <span class="k">ports:</span>
+      - <span class="s">"127.0.0.1:6379:6379"</span>
+<span class="k">volumes:</span>
+  <span class="k">pgdata:</span></code></pre></div>
+  <p>Your systemd app keeps using <code>localhost:5432</code> and <code>localhost:6379</code>, exactly as in steps 8 and 13.</p>
+  <div class="callout info">
+    <div class="callout-title">ℹ️ Is <code>127.0.0.1:</code> safe given that Docker bypasses ufw?</div>
+    <p>Yes. The ufw-bypass problem from step 10 affects ports published on <em>all</em> interfaces (<code>"5432:5432"</code>). With <code>"127.0.0.1:5432:5432"</code>, Docker only listens on loopback, which the internet can't reach. <strong>Always add the <code>127.0.0.1:</code> prefix</strong> to any port that isn't 80 or 443.</p>
+  </div>
+</section>
+
+<section id="docker-dockerfile">
+  <h3 style="font-size:24px;margin-top:48px">Writing great Dockerfiles</h3>
+
+  <h4>One Dockerfile, several targets</h4>
+  <p>A single multi-stage Dockerfile can produce a <strong>dev</strong> image (Way 2) and a small <strong>prod</strong> image (Ways 3, 4, 6 and 7):</p>
+  <div class="code"><div class="code-head"><span>backend/Dockerfile</span></div><pre><code><span class="c"># syntax=docker/dockerfile:1</span>
+
+<span class="c"># ---------- base: shared first steps ----------</span>
+<span class="k">FROM</span> node:22-alpine <span class="k">AS</span> base
+<span class="k">WORKDIR</span> /app
+<span class="k">COPY</span> package*.json ./
+
+<span class="c"># ---------- dev: all deps, run with hot reload ----------</span>
+<span class="k">FROM</span> base <span class="k">AS</span> dev
+<span class="k">RUN</span> --mount=type=cache,target=/root/.npm npm ci
+<span class="k">COPY</span> . .
+<span class="k">ENV</span> HOST=0.0.0.0
+<span class="k">CMD</span> ["npm", "run", "dev"]
+
+<span class="c"># ---------- build: compile TypeScript etc. ----------</span>
+<span class="k">FROM</span> base <span class="k">AS</span> build
+<span class="k">RUN</span> --mount=type=cache,target=/root/.npm npm ci
+<span class="k">COPY</span> . .
+<span class="k">RUN</span> npm run build
+
+<span class="c"># ---------- prod: small, no dev deps, non-root ----------</span>
+<span class="k">FROM</span> node:22-alpine <span class="k">AS</span> prod
+<span class="k">WORKDIR</span> /app
+<span class="k">ENV</span> NODE_ENV=production HOST=0.0.0.0 PORT=3000
+<span class="k">COPY</span> package*.json ./
+<span class="k">RUN</span> --mount=type=cache,target=/root/.npm npm ci --omit=dev
+<span class="k">COPY</span> --from=build /app/dist ./dist
+<span class="k">USER</span> node
+<span class="k">EXPOSE</span> 3000
+<span class="k">HEALTHCHECK</span> --interval=10s --timeout=3s --start-period=10s --retries=5 \
+  CMD wget -qO- http://127.0.0.1:3000/api/health || exit 1
+<span class="k">CMD</span> ["node", "dist/index.js"]</code></pre></div>
+  <div class="code"><div class="code-head"><span>your computer</span></div><pre><code>docker build -t myapp-api ./backend                 <span class="c"># last stage (prod) by default</span>
+docker build --target dev -t myapp-api:dev ./backend
+docker image ls myapp-api                            <span class="c"># compare sizes</span></code></pre></div>
+
+  <h4>The rules that matter</h4>
+  <table>
+    <tr><th>Rule</th><th>Why</th></tr>
+    <tr><td><strong>Copy <code>package*.json</code> and install <em>before</em> <code>COPY . .</code></strong></td><td>Layers are cached. If only your code changed, Docker reuses the slow <code>npm ci</code> layer, so builds take seconds instead of minutes.</td></tr>
+    <tr><td>Use multi-stage builds</td><td>Compilers, dev dependencies and source stay in the build stage, which gives a smaller image with less to attack.</td></tr>
+    <tr><td><code>USER node</code> (or create a user)</td><td>If the app is compromised, the attacker isn't root inside the container.</td></tr>
+    <tr><td>Use the JSON form: <code>CMD ["node", "dist/index.js"]</code></td><td>Node becomes PID 1 and receives <code>SIGTERM</code> on <code>docker stop</code>. The shell form (<code>CMD node dist/index.js</code>) and <code>npm start</code> can swallow it, so the container gets force-killed after 10 s.</td></tr>
+    <tr><td>Pin versions: <code>node:22-alpine</code>, not <code>node:latest</code></td><td>Builds stay reproducible. Bump versions on purpose, not by surprise.</td></tr>
+    <tr><td>Add a <code>HEALTHCHECK</code></td><td>Compose (<code>--wait</code>, <code>service_healthy</code>) and platforms then know when the app is <em>actually</em> ready, not just started.</td></tr>
+    <tr><td>Never <code>COPY .env</code> or bake secrets into images</td><td>Anyone who can pull the image can read every layer. Pass secrets at <em>run</em> time.</td></tr>
+    <tr><td><code>--mount=type=cache</code> for package managers</td><td>Keeps the npm/pip download cache between builds, even when the layer itself is rebuilt.</td></tr>
+  </table>
+
+  <h4>A thorough .dockerignore</h4>
+  <p>Everything in the build folder is sent to Docker as the "build context". Leave out what isn't needed, so builds are faster and secrets can't sneak in:</p>
+  <div class="code"><div class="code-head"><span>backend/.dockerignore</span></div><pre><code>node_modules
+dist
+.git
+.github
+.env
+.env.*
+*.log
+coverage
+.vscode
+.idea
+Dockerfile*
+compose*.yaml
+README.md</code></pre></div>
+
+  <h4>Shutting down cleanly</h4>
+  <p>On deploy, Docker sends <code>SIGTERM</code> and waits 10 seconds before killing the process. Finish in-flight requests and close connections during that window:</p>
+  <div class="code"><div class="code-head"><span>backend/src/index.js</span></div><pre><code><span class="k">const</span> server = app.listen(port, host, () =&gt; console.log(<span class="s">`listening on ${port}`</span>));
+
+process.on(<span class="s">"SIGTERM"</span>, () =&gt; {
+  console.log(<span class="s">"SIGTERM received, shutting down"</span>);
+  server.close(<span class="k">async</span> () =&gt; {          <span class="c">// stop accepting, finish in-flight requests</span>
+    <span class="k">await</span> pool.end();                  <span class="c">// close Postgres pool</span>
+    <span class="k">await</span> redis.quit();                <span class="c">// close Redis</span>
+    process.exit(0);
+  });
+});</code></pre></div>
+
+  <h4>Choosing a base image</h4>
+  <table>
+    <tr><th>Base</th><th>Approx. size</th><th>Notes</th></tr>
+    <tr><td><code>node:22</code></td><td>~1 GB</td><td>Full Debian with build tools. Rarely needed for the final image.</td></tr>
+    <tr><td><code>node:22-slim</code></td><td>~200–250 MB</td><td>Debian, minimal. Best compatibility for native modules (<code>sharp</code>, <code>bcrypt</code>, Prisma).</td></tr>
+    <tr><td><code>node:22-alpine</code></td><td>~150 MB</td><td>Smallest common choice. Uses musl instead of glibc, and a few native packages need extra work.</td></tr>
+    <tr><td>Distroless (<code>gcr.io/distroless/nodejs22-debian12</code>)</td><td>~150 MB</td><td>No shell or package manager. Very locked down, but harder to debug.</td></tr>
+  </table>
+  <p>If a native module fails on Alpine with errors about <code>ld-linux</code> or <code>glibc</code>, switch to <code>-slim</code>.</p>
+
+  <h4>Frontend images</h4>
+  <div class="tabs">
+    <div class="tab-list"><button class="tab-btn active">Static SPA (Vite/React)</button><button class="tab-btn">Next.js (standalone)</button></div>
+    <div class="tab-panel active">
+      <p>Build with Node, serve with Caddy. This is the <code>Dockerfile.web</code> from <a href="#step-10">step 10.4</a>. The final image contains no Node at all, just Caddy plus your files.</p>
+      <div class="code"><div class="code-head"><span>Dockerfile.web</span></div><pre><code><span class="k">FROM</span> node:22-alpine <span class="k">AS</span> build
+<span class="k">WORKDIR</span> /app
+<span class="k">COPY</span> frontend/package*.json ./
+<span class="k">RUN</span> --mount=type=cache,target=/root/.npm npm ci
+<span class="k">COPY</span> frontend/ .
+<span class="k">ARG</span> VITE_API_URL=/api              <span class="c"># build-time value, baked into the JS</span>
+<span class="k">ENV</span> VITE_API_URL=$VITE_API_URL
+<span class="k">RUN</span> npm run build
+
+<span class="k">FROM</span> caddy:2
+<span class="k">COPY</span> Caddyfile /etc/caddy/Caddyfile
+<span class="k">COPY</span> --from=build /app/dist /srv</code></pre></div>
+      <p><code>ARG</code> values exist only at build time (<code>docker build --build-arg VITE_API_URL=…</code>). That's fine here because frontend variables are public anyway (step 6.3).</p>
+    </div>
+    <div class="tab-panel">
+      <p>Set <code>output: "standalone"</code> in <code>next.config.js</code>. Next then produces a self-contained <code>server.js</code> with only the dependencies it needs:</p>
+      <div class="code"><div class="code-head"><span>frontend/Dockerfile</span></div><pre><code><span class="k">FROM</span> node:22-alpine <span class="k">AS</span> build
+<span class="k">WORKDIR</span> /app
+<span class="k">COPY</span> package*.json ./
+<span class="k">RUN</span> --mount=type=cache,target=/root/.npm npm ci
+<span class="k">COPY</span> . .
+<span class="k">RUN</span> npm run build
+
+<span class="k">FROM</span> node:22-alpine
+<span class="k">WORKDIR</span> /app
+<span class="k">ENV</span> NODE_ENV=production PORT=3000 HOSTNAME=0.0.0.0
+<span class="k">COPY</span> --from=build /app/.next/standalone ./
+<span class="k">COPY</span> --from=build /app/.next/static ./.next/static
+<span class="k">COPY</span> --from=build /app/public ./public
+<span class="k">USER</span> node
+<span class="k">EXPOSE</span> 3000
+<span class="k">CMD</span> ["node", "server.js"]</code></pre></div>
+      <p>Then Caddy simply does <code>reverse_proxy web:3000</code> for <code>/</code> and <code>reverse_proxy api:3000</code> for <code>/api/*</code>.</p>
+    </div>
+  </div>
+</section>
+
+<section id="docker-compose">
+  <h3 style="font-size:24px;margin-top:48px">Way 3: Compose for production, in depth</h3>
+  <p>Step 10 used a minimal Compose file. Here's a production-ready one for the whole project: web + API + background worker + a one-off migration job + Postgres + Redis, with health checks, resource limits, log caps and a private network for the data services.</p>
+
+  <h4>Files on the server</h4>
+  <div class="tree">~/app/
+├── compose.yaml   ← below
+├── .env           ← read by Compose itself: TAG, POSTGRES_PASSWORD, REDIS_PASSWORD
+└── .env.api       ← passed into the API/worker containers: JWT_SECRET, API keys…</div>
+  <p>Both <code>.env</code> files get <code>chmod 600</code>. If you use registry deploys (Way 4), <strong>that's all the server needs</strong>: no source code, no Node, no build tools.</p>
+
+  <div class="code"><div class="code-head"><span>compose.yaml</span></div><pre><code><span class="k">name:</span> myapp
+
+<span class="c"># ---- reusable snippets (YAML anchors) ----</span>
+<span class="k">x-logging:</span> &amp;logging
+  <span class="k">driver:</span> json-file
+  <span class="k">options:</span> { <span class="k">max-size:</span> <span class="s">"10m"</span>, <span class="k">max-file:</span> <span class="s">"3"</span> }
+
+<span class="k">x-api-common:</span> &amp;api-common
+  <span class="k">image:</span> ghcr.io/you/myapp-api:${TAG:-latest}   <span class="c"># or  build: ./backend  (Way 3)</span>
+  <span class="k">restart:</span> unless-stopped
+  <span class="k">env_file:</span> .env.api
+  <span class="k">environment:</span>
+    <span class="k">DATABASE_URL:</span> postgres://myapp:${POSTGRES_PASSWORD}@db:5432/myapp
+    <span class="k">REDIS_URL:</span> redis://:${REDIS_PASSWORD}@redis:6379
+  <span class="k">init:</span> true                                     <span class="c"># tiny init process: forwards signals, reaps zombies</span>
+  <span class="k">logging:</span> *logging
+
+<span class="k">services:</span>
+  <span class="k">web:</span>                                           <span class="c"># Caddy + built frontend (Dockerfile.web)</span>
+    <span class="k">image:</span> ghcr.io/you/myapp-web:${TAG:-latest}
+    <span class="k">restart:</span> unless-stopped
+    <span class="k">ports:</span>
+      - <span class="s">"80:80"</span>
+      - <span class="s">"443:443"</span>
+      - <span class="s">"443:443/udp"</span>                            <span class="c"># HTTP/3</span>
+    <span class="k">volumes:</span>
+      - caddy_data:/data                           <span class="c"># certificates: keep them!</span>
+      - caddy_config:/config
+    <span class="k">networks:</span> [edge]
+    <span class="k">depends_on:</span>
+      <span class="k">api:</span> { <span class="k">condition:</span> service_healthy }
+    <span class="k">logging:</span> *logging
+
+  <span class="k">api:</span>
+    &lt;&lt;: *api-common
+    <span class="k">networks:</span> [edge, backend]
+    <span class="k">depends_on:</span>
+      <span class="k">db:</span>      { <span class="k">condition:</span> service_healthy }
+      <span class="k">redis:</span>   { <span class="k">condition:</span> service_healthy }
+    <span class="k">read_only:</span> true                               <span class="c"># filesystem is read-only…</span>
+    <span class="k">tmpfs:</span> [/tmp]                                  <span class="c"># …except /tmp</span>
+    <span class="k">deploy:</span>
+      <span class="k">resources:</span>
+        <span class="k">limits:</span> { <span class="k">memory:</span> 512M, <span class="k">cpus:</span> <span class="s">"1.0"</span> }
+
+  <span class="k">worker:</span>                                        <span class="c"># background jobs (e.g. BullMQ), same image</span>
+    &lt;&lt;: *api-common
+    <span class="k">command:</span> [<span class="s">"node"</span>, <span class="s">"dist/worker.js"</span>]
+    <span class="k">networks:</span> [edge, backend]                      <span class="c"># edge = can reach external APIs/email</span>
+    <span class="k">healthcheck:</span> { <span class="k">disable:</span> true }               <span class="c"># no HTTP server in the worker</span>
+    <span class="k">depends_on:</span>
+      <span class="k">db:</span>    { <span class="k">condition:</span> service_healthy }
+      <span class="k">redis:</span> { <span class="k">condition:</span> service_healthy }
+    <span class="k">deploy:</span>
+      <span class="k">resources:</span>
+        <span class="k">limits:</span> { <span class="k">memory:</span> 384M }
+
+  <span class="k">migrate:</span>                                       <span class="c"># one-off: docker compose run --rm migrate</span>
+    &lt;&lt;: *api-common
+    <span class="k">profiles:</span> [tools]                              <span class="c"># NOT started by "up"; only when run explicitly</span>
+    <span class="k">command:</span> [<span class="s">"npm"</span>, <span class="s">"run"</span>, <span class="s">"migrate"</span>]           <span class="c"># your migration command</span>
+    <span class="k">restart:</span> <span class="s">"no"</span>
+    <span class="k">networks:</span> [backend]
+    <span class="k">healthcheck:</span> { <span class="k">disable:</span> true }
+    <span class="k">depends_on:</span>
+      <span class="k">db:</span> { <span class="k">condition:</span> service_healthy }
+
+  <span class="k">db:</span>
+    <span class="k">image:</span> postgres:17
+    <span class="k">restart:</span> unless-stopped
+    <span class="k">environment:</span>
+      <span class="k">POSTGRES_USER:</span> myapp
+      <span class="k">POSTGRES_PASSWORD:</span> ${POSTGRES_PASSWORD}
+      <span class="k">POSTGRES_DB:</span> myapp
+    <span class="k">volumes:</span>
+      - pgdata:/var/lib/postgresql/data
+    <span class="k">networks:</span> [backend]
+    <span class="k">shm_size:</span> 128mb
+    <span class="k">healthcheck:</span>
+      <span class="k">test:</span> [<span class="s">"CMD-SHELL"</span>, <span class="s">"pg_isready -U myapp"</span>]
+      <span class="k">interval:</span> 5s
+      <span class="k">retries:</span> 10
+    <span class="k">logging:</span> *logging
+
+  <span class="k">redis:</span>
+    <span class="k">image:</span> redis:7-alpine
+    <span class="k">restart:</span> unless-stopped
+    <span class="k">command:</span> [<span class="s">"redis-server"</span>, <span class="s">"--requirepass"</span>, <span class="s">"${REDIS_PASSWORD}"</span>,
+              <span class="s">"--maxmemory"</span>, <span class="s">"256mb"</span>, <span class="s">"--maxmemory-policy"</span>, <span class="s">"allkeys-lru"</span>]
+    <span class="k">environment:</span>
+      <span class="k">REDIS_PASSWORD:</span> ${REDIS_PASSWORD}
+    <span class="k">volumes:</span>
+      - redisdata:/data
+    <span class="k">networks:</span> [backend]
+    <span class="k">healthcheck:</span>
+      <span class="k">test:</span> [<span class="s">"CMD-SHELL"</span>, <span class="s">"REDISCLI_AUTH=$$REDIS_PASSWORD redis-cli ping | grep PONG"</span>]
+      <span class="k">interval:</span> 5s
+      <span class="k">retries:</span> 10
+    <span class="k">logging:</span> *logging
+
+<span class="k">networks:</span>
+  <span class="k">edge:</span>                       <span class="c"># normal network with internet access</span>
+  <span class="k">backend:</span>
+    <span class="k">internal:</span> true            <span class="c"># db/redis: no internet in or out</span>
+
+<span class="k">volumes:</span>
+  <span class="k">pgdata:</span>
+  <span class="k">redisdata:</span>
+  <span class="k">caddy_data:</span>
+  <span class="k">caddy_config:</span></code></pre></div>
+
+  <h4>What each part is doing</h4>
+  <table>
+    <tr><th>Feature</th><th>Purpose</th></tr>
+    <tr><td><code>x-…</code> + <code>&amp;anchor</code> / <code>*alias</code> / <code>&lt;&lt;:</code></td><td>Define shared settings once and reuse them, so API, worker and migrate can't drift apart.</td></tr>
+    <tr><td><code>${TAG:-latest}</code></td><td>Image version comes from <code>.env</code>. Change one line to deploy or roll back.</td></tr>
+    <tr><td><code>migrate</code> with <code>profiles: [tools]</code></td><td>A one-off job that <code>up</code> skips. The deploy runs it explicitly <em>before</em> starting the new API, so if migrations fail the deploy stops and the old version keeps running. The migration tool (Prisma, Knex…) must be in <code>dependencies</code>, not <code>devDependencies</code>, because the prod image omits dev deps.</td></tr>
+    <tr><td><code>worker</code> using the API image</td><td>One image, several roles. Only the <code>command</code> differs.</td></tr>
+    <tr><td><code>networks.backend.internal</code></td><td>The database and Redis can't reach the internet, and nothing outside can reach them.</td></tr>
+    <tr><td><code>read_only</code> + <code>tmpfs</code></td><td>An attacker can't modify the app's files or drop tools onto the disk.</td></tr>
+    <tr><td><code>deploy.resources.limits</code></td><td>A memory leak in one service can't take the whole server down.</td></tr>
+    <tr><td><code>caddy_data</code> volume</td><td>Keeps HTTPS certificates. Without it, every recreate requests new ones and you can hit Let's Encrypt rate limits.</td></tr>
+    <tr><td><code>restart: unless-stopped</code></td><td>Comes back after crashes and reboots, but stays down if you stopped it on purpose.</td></tr>
+  </table>
+
+  <h4>Restart policies</h4>
+  <table>
+    <tr><th>Policy</th><th>Behaviour</th><th>Use for</th></tr>
+    <tr><td><code>"no"</code></td><td>Never restart</td><td>One-off jobs (migrate)</td></tr>
+    <tr><td><code>on-failure</code></td><td>Restart only after a non-zero exit</td><td>Batch jobs that should retry</td></tr>
+    <tr><td><code>always</code></td><td>Always, even after you stopped it (once the Docker daemon restarts)</td><td>Rarely what you want</td></tr>
+    <tr><td><code>unless-stopped</code></td><td>Always, unless you stopped it</td><td>Long-running services ✅</td></tr>
+  </table>
+
+  <h4>Deploying with this file</h4>
+  <div class="code"><div class="code-head"><span>server</span></div><pre><code>cd ~/app
+docker compose config --quiet &amp;&amp; echo "config OK"   <span class="c"># validate (also checks .env interpolation)</span>
+docker compose pull                                 <span class="c"># get the new images (Way 4)</span>
+docker compose run --rm migrate                     <span class="c"># apply DB migrations; stops here if they fail</span>
+docker compose up -d --wait                         <span class="c"># start/replace api, worker, web; wait until healthy</span>
+docker compose ps</code></pre></div>
+  <p><code>up -d</code> only recreates containers whose image or config changed. <code>--wait</code> blocks until everything is healthy and exits with an error if something isn't, which is perfect for deploy scripts.</p>
+
+  <h4>Dev and prod from the same files</h4>
+  <p>Compose can merge files. Keep the shared definition in <code>compose.yaml</code> and the differences in small extra files:</p>
+  <div class="code"><div class="code-head"><span>your computer</span></div><pre><code>docker compose -f compose.yaml -f compose.dev.yaml up        <span class="c"># dev: build from source, mounts, ports</span>
+docker compose -f compose.yaml -f compose.staging.yaml up -d <span class="c"># staging: different domain, smaller limits</span>
+docker compose -f compose.yaml -f compose.dev.yaml config     <span class="c"># show the merged result</span></code></pre></div>
+  <div class="callout warn">
+    <div class="callout-title">⚠️ Watch out for compose.override.yaml</div>
+    <p>A file named <code>compose.override.yaml</code> is loaded <em>automatically</em> when it exists. That's handy on laptops, but dangerous if it accidentally gets copied to the server. Prefer explicit names like <code>compose.dev.yaml</code> together with <code>-f</code>.</p>
+  </div>
+</section>
+
+<section id="docker-registry">
+  <h3 style="font-size:24px;margin-top:48px">Way 4: Build in CI → push to a registry → server pulls</h3>
+  <p>This is the most widely used production setup. GitHub Actions builds the images, tags them with the git commit SHA, and pushes them to <strong>GitHub Container Registry (GHCR)</strong>. The server only ever <em>pulls</em> them. Builds never use the server's CPU or RAM, a broken build never reaches production, and every version ever deployed is still available for rollback.</p>
+  <div class="diagram">
+    <div class="d-row">
+      <div class="d-box b1"><b>git push</b>main</div>
+      <div class="d-box b2"><b>GitHub Actions</b>test · build · tag <code>:sha</code></div>
+      <div class="d-box b3"><b>GHCR</b>ghcr.io/you/myapp-api:3f9c2a1</div>
+      <div class="d-box b4"><b>Server</b>compose pull · up -d --wait</div>
+    </div>
+  </div>
+
+  <h4>1. Workflow: build, push, deploy</h4>
+  <div class="code"><div class="code-head"><span>.github/workflows/docker-deploy.yml</span></div><pre><code><span class="k">name:</span> Docker build &amp; deploy
+<span class="k">on:</span>
+  <span class="k">push:</span>
+    <span class="k">branches:</span> [main]
+
+<span class="k">permissions:</span>
+  <span class="k">contents:</span> read
+  <span class="k">packages:</span> write                 <span class="c"># allow pushing to GHCR</span>
+
+<span class="k">concurrency:</span> production
+
+<span class="k">jobs:</span>
+  <span class="k">build:</span>
+    <span class="k">runs-on:</span> ubuntu-latest
+    <span class="k">strategy:</span>
+      <span class="k">matrix:</span>
+        <span class="k">include:</span>
+          - { <span class="k">name:</span> api, <span class="k">context:</span> ./backend, <span class="k">file:</span> ./backend/Dockerfile }
+          - { <span class="k">name:</span> web, <span class="k">context:</span> .,         <span class="k">file:</span> ./Dockerfile.web }
+    <span class="k">steps:</span>
+      - <span class="k">uses:</span> actions/checkout@v4
+      - <span class="k">uses:</span> docker/setup-buildx-action@v3
+      - <span class="k">uses:</span> docker/login-action@v3
+        <span class="k">with:</span>
+          <span class="k">registry:</span> ghcr.io
+          <span class="k">username:</span> ${{ github.actor }}
+          <span class="k">password:</span> ${{ secrets.GITHUB_TOKEN }}
+      - <span class="k">uses:</span> docker/build-push-action@v6
+        <span class="k">with:</span>
+          <span class="k">context:</span> ${{ matrix.context }}
+          <span class="k">file:</span> ${{ matrix.file }}
+          <span class="k">push:</span> true
+          <span class="k">tags:</span> |
+            ghcr.io/you/myapp-${{ matrix.name }}:${{ github.sha }}
+            ghcr.io/you/myapp-${{ matrix.name }}:latest
+          <span class="k">cache-from:</span> type=gha,scope=${{ matrix.name }}
+          <span class="k">cache-to:</span> type=gha,mode=max,scope=${{ matrix.name }}
+
+  <span class="k">deploy:</span>
+    <span class="k">needs:</span> build
+    <span class="k">runs-on:</span> ubuntu-latest
+    <span class="k">steps:</span>
+      - <span class="k">uses:</span> appleboy/ssh-action@v1
+        <span class="k">with:</span>
+          <span class="k">host:</span> ${{ secrets.SERVER_HOST }}
+          <span class="k">username:</span> deploy
+          <span class="k">key:</span> ${{ secrets.SSH_PRIVATE_KEY }}
+          <span class="k">script:</span> |
+            set -e
+            cd ~/app
+            sed -i "s/^TAG=.*/TAG=${{ github.sha }}/" .env
+            docker compose pull
+            docker compose run --rm migrate
+            docker compose up -d --wait
+            docker image prune -f</code></pre></div>
+  <p>Image names on GHCR must be <strong>lowercase</strong> (<code>ghcr.io/pen-clock/…</code>, not <code>Pen-Clock</code>). Make sure <code>.env</code> on the server has a <code>TAG=</code> line for the <code>sed</code> to replace.</p>
+
+  <h4>2. Let the server pull private images</h4>
+  <p>Create a GitHub <em>fine-grained or classic</em> personal access token with only <strong>read:packages</strong>, then log in once on the server:</p>
+  <div class="code"><div class="code-head"><span>server</span></div><pre><code>echo "YOUR_READ_PACKAGES_TOKEN" | docker login ghcr.io -u your-github-username --password-stdin</code></pre></div>
+  <p>(Not needed if you make the packages public, under the package settings on GitHub.)</p>
+
+  <h4>3. Rollback in seconds</h4>
+  <div class="code"><div class="code-head"><span>server</span></div><pre><code>cd ~/app
+sed -i "s/^TAG=.*/TAG=PREVIOUS_GOOD_SHA/" .env   <span class="c"># find SHAs in GitHub's commit list or GHCR</span>
+docker compose up -d --wait</code></pre></div>
+  <div class="callout warn">
+    <div class="callout-title">⚠️ Rollbacks and migrations</div>
+    <p>Rolling back the image doesn't roll back the database. Write <strong>backwards-compatible migrations</strong>: add columns before using them, and remove old columns only in a <em>later</em> release, once nothing reads them. Then the previous image always still works.</p>
+  </div>
+
+  <h4>Building for ARM servers</h4>
+  <p>If your server is ARM (Hetzner CAX, AWS Graviton) and CI runs on x86, build for both architectures. Add <code>docker/setup-qemu-action@v3</code> before buildx, and <code>platforms: linux/amd64,linux/arm64</code> to the build step. Otherwise the container fails to start with <code>exec format error</code>.</p>
+
+  <h4>Registry options</h4>
+  <table>
+    <tr><th>Registry</th><th>Notes</th></tr>
+    <tr><td><strong>GHCR</strong> (ghcr.io)</td><td>Built into GitHub. The natural choice with GitHub Actions.</td></tr>
+    <tr><td><strong>Docker Hub</strong></td><td>The default public registry. Has pull rate limits for anonymous and free users.</td></tr>
+    <tr><td><strong>AWS ECR</strong></td><td>Use with ECS/Fargate (see <a href="#aws-ecs">ECS</a>).</td></tr>
+    <tr><td><strong>Google Artifact Registry</strong></td><td>Use with Cloud Run.</td></tr>
+  </table>
+</section>
+
+<section id="docker-platforms">
+  <h3 style="font-size:24px;margin-top:48px">Way 6: Self-hosted PaaS on your own server</h3>
+  <p>These tools run on your VPS and handle Docker for you: git-push or image deploys, automatic HTTPS, one-click databases, and often a web dashboard. You keep a VPS price with an experience close to Vercel or Heroku.</p>
+  <table>
+    <tr><th>Tool</th><th>Style</th><th>Good to know</th></tr>
+    <tr><td><strong>Coolify</strong></td><td>Web dashboard</td><td>The most Vercel-like option. Deploys from GitHub with preview deployments, databases, backups to S3. Needs about 2 GB+ RAM for itself.</td></tr>
+    <tr><td><strong>Dokploy</strong></td><td>Web dashboard</td><td>Similar to Coolify. Deploys Compose files directly, and supports multiple servers.</td></tr>
+    <tr><td><strong>Kamal</strong></td><td>CLI + one YAML file</td><td>From the Rails team. Builds and pushes your image, then does zero-downtime deploys to any servers over SSH. No dashboard and nothing extra running on the server besides its proxy.</td></tr>
+    <tr><td><strong>Dokku</strong></td><td>CLI, <code>git push dokku main</code></td><td>A "mini-Heroku". Mature, with plugins for Postgres, Redis and Let's Encrypt.</td></tr>
+    <tr><td><strong>CapRover</strong></td><td>Web dashboard</td><td>Simple, with one-click apps.</td></tr>
+  </table>
+
+  <details>
+    <summary>Example: deploying the API with Kamal</summary>
+    <div class="code"><div class="code-head"><span>your computer</span></div><pre><code>gem install kamal        <span class="c"># needs Ruby; or run it via its Docker image</span>
+kamal init               <span class="c"># creates config/deploy.yml and .kamal/secrets</span></code></pre></div>
+    <div class="code"><div class="code-head"><span>config/deploy.yml</span></div><pre><code><span class="k">service:</span> myapp-api
+<span class="k">image:</span> you/myapp-api
+
+<span class="k">servers:</span>
+  <span class="k">web:</span>
+    - 203.0.113.10
+
+<span class="k">proxy:</span>                        <span class="c"># kamal-proxy: HTTPS + zero-downtime switching</span>
+  <span class="k">ssl:</span> true
+  <span class="k">host:</span> api.myapp.com
+  <span class="k">app_port:</span> 3000
+  <span class="k">healthcheck:</span>
+    <span class="k">path:</span> /api/health
+
+<span class="k">registry:</span>
+  <span class="k">server:</span> ghcr.io
+  <span class="k">username:</span> you
+  <span class="k">password:</span>
+    - KAMAL_REGISTRY_PASSWORD
+
+<span class="k">builder:</span>
+  <span class="k">arch:</span> amd64
+  <span class="k">context:</span> ./backend
+
+<span class="k">env:</span>
+  <span class="k">secret:</span>
+    - DATABASE_URL
+    - JWT_SECRET</code></pre></div>
+    <div class="code"><div class="code-head"><span>your computer</span></div><pre><code>kamal setup            <span class="c"># first time: installs Docker on the server, boots the proxy, deploys</span>
+kamal deploy           <span class="c"># every later deploy: build → push → start new → health check → switch → stop old</span>
+kamal app logs -f
+kamal rollback VERSION <span class="c"># go back to a previous image version</span></code></pre></div>
+    <p>Secrets are read from <code>.kamal/secrets</code>, which can pull them from your environment or a password manager. Never commit real values.</p>
+  </details>
+</section>
+
+<section id="docker-managed">
+  <h3 style="font-size:24px;margin-top:48px">Way 7: Managed container platforms</h3>
+  <p>Hand the <strong>same image</strong> to a platform that runs it for you. You don't manage the OS, patching or load balancer, and most of them scale automatically. You pay more per unit of CPU, but your time is worth something too.</p>
+  <table>
+    <tr><th>Platform</th><th>Deploy</th><th>Notes</th></tr>
+    <tr><td><strong>Google Cloud Run</strong></td><td><code>gcloud run deploy</code></td><td>Scales to zero (no traffic = near-zero cost); billed per request time. Good free tier.</td></tr>
+    <tr><td><strong>Fly.io</strong></td><td><code>fly launch</code> / <code>fly deploy</code></td><td>Runs your Dockerfile on machines in regions worldwide. Managed Postgres available.</td></tr>
+    <tr><td><strong>AWS ECS Fargate / App Runner</strong></td><td>See <a href="#aws-ecs">ECS</a></td><td>Deepest integration with the rest of AWS.</td></tr>
+    <tr><td><strong>Render / Railway</strong></td><td>Connect the repo; they detect the Dockerfile</td><td>The easiest options; closest to Vercel for backends.</td></tr>
+    <tr><td><strong>Azure Container Apps</strong></td><td><code>az containerapp up</code></td><td>Scales to zero; good if you're already on Azure.</td></tr>
+  </table>
+  <div class="tabs">
+    <div class="tab-list"><button class="tab-btn active">Cloud Run</button><button class="tab-btn">Fly.io</button></div>
+    <div class="tab-panel active">
+      <div class="code"><div class="code-head"><span>your computer</span></div><pre><code><span class="c"># one-time: create a repo in Artifact Registry</span>
+gcloud artifacts repositories create myapp --repository-format=docker --location=us-central1
+gcloud auth configure-docker us-central1-docker.pkg.dev
+
+IMG=us-central1-docker.pkg.dev/YOUR_PROJECT/myapp/myapp-api:v1
+docker build --platform linux/amd64 -t $IMG ./backend &amp;&amp; docker push $IMG
+
+gcloud run deploy myapp-api \
+  --image $IMG --region us-central1 --port 3000 \
+  --allow-unauthenticated \
+  --set-secrets DATABASE_URL=database-url:latest</code></pre></div>
+      <p>Or let Google build it for you: <code>gcloud run deploy myapp-api --source ./backend</code>. Cloud Run sets the <code>PORT</code> environment variable; your app already reads it.</p>
+    </div>
+    <div class="tab-panel">
+      <div class="code"><div class="code-head"><span>your computer (in backend/)</span></div><pre><code>fly launch                              <span class="c"># detects the Dockerfile, writes fly.toml, picks a region</span>
+fly secrets set DATABASE_URL=postgres://… JWT_SECRET=…
+fly deploy                              <span class="c"># build + release; rolling update by default</span>
+fly logs
+fly scale count 2                       <span class="c"># two machines for redundancy</span></code></pre></div>
+      <p>In <code>fly.toml</code>, set <code>internal_port = 3000</code> and add an HTTP health check on <code>/api/health</code>.</p>
+    </div>
+  </div>
+  <div class="callout tip">
+    <div class="callout-title">💡 Twelve-factor makes your image portable</div>
+    <p>An image runs anywhere if it (1) reads all config from <strong>environment variables</strong>, (2) listens on <code>$PORT</code> on <code>0.0.0.0</code>, (3) writes logs to <strong>stdout</strong>, not files, (4) keeps no state on local disk (use Postgres, Redis or S3/R2), and (5) shuts down cleanly on <code>SIGTERM</code>. Follow those and you can switch platforms whenever you like.</p>
+  </div>
+</section>
+
+<section id="docker-ci">
+  <h3 style="font-size:24px;margin-top:48px">Way 8: Real databases in CI tests</h3>
+  <p>GitHub Actions can start containers next to your test job, so integration tests run against real Postgres and Redis instead of mocks:</p>
+  <div class="code"><div class="code-head"><span>.github/workflows/test.yml</span></div><pre><code><span class="k">name:</span> Test
+<span class="k">on:</span> [push, pull_request]
+
+<span class="k">jobs:</span>
+  <span class="k">test:</span>
+    <span class="k">runs-on:</span> ubuntu-latest
+    <span class="k">services:</span>
+      <span class="k">postgres:</span>
+        <span class="k">image:</span> postgres:17
+        <span class="k">env:</span>
+          <span class="k">POSTGRES_PASSWORD:</span> test
+        <span class="k">ports:</span> [<span class="s">"5432:5432"</span>]
+        <span class="k">options:</span> &gt;-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-retries 10
+      <span class="k">redis:</span>
+        <span class="k">image:</span> redis:7-alpine
+        <span class="k">ports:</span> [<span class="s">"6379:6379"</span>]
+    <span class="k">env:</span>
+      <span class="k">DATABASE_URL:</span> postgres://postgres:test@localhost:5432/postgres
+      <span class="k">REDIS_URL:</span> redis://localhost:6379
+    <span class="k">steps:</span>
+      - <span class="k">uses:</span> actions/checkout@v4
+      - <span class="k">uses:</span> actions/setup-node@v4
+        <span class="k">with:</span>
+          <span class="k">node-version:</span> 22
+      - <span class="k">working-directory:</span> backend
+        <span class="k">run:</span> |
+          npm ci
+          npm run migrate
+          npm test</code></pre></div>
+  <p>Make the deploy workflow depend on this one passing (e.g. put both in one workflow with <code>needs: test</code>), so broken code never ships. For tests that start containers themselves, look at <strong>Testcontainers</strong> (available for Node, Python, Go, Java…).</p>
+</section>
+
+<section id="docker-oneoff">
+  <h3 style="font-size:24px;margin-top:48px">Way 9: One-off tools &amp; tasks</h3>
+  <p><code>docker run --rm</code> runs something once and then removes the container. You get a tool without installing it.</p>
+  <table>
+    <tr><th>Task</th><th>Command</th></tr>
+    <tr><td>Run migrations in production</td><td><code>docker compose run --rm migrate</code></td></tr>
+    <tr><td>Run a script with the app's config</td><td><code>docker compose run --rm api node dist/scripts/seed.js</code></td></tr>
+    <tr><td>Open a shell in the running API</td><td><code>docker compose exec api sh</code></td></tr>
+    <tr><td>Database console</td><td><code>docker compose exec db psql -U myapp myapp</code></td></tr>
+    <tr><td>Use a specific psql/pg_dump version</td><td><code>docker run --rm -it postgres:17 psql "postgres://…"</code></td></tr>
+    <tr><td>Try another Node version on your code</td><td><code>docker run --rm -it -v "$PWD":/app -w /app node:24-alpine npm test</code></td></tr>
+    <tr><td>Scan an image for vulnerabilities</td><td><code>docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy image myapp-api</code></td></tr>
+    <tr><td>Scheduled jobs (cron)</td><td>Host crontab: <code>0 3 * * * cd ~/app &amp;&amp; docker compose run --rm api node dist/jobs/nightly.js</code></td></tr>
+  </table>
+</section>
+
+<section id="docker-k8s">
+  <h3 style="font-size:24px;margin-top:48px">Way 10: Kubernetes (and when not to)</h3>
+  <p>Kubernetes runs containers across a <em>cluster</em> of machines, with self-healing, rolling deploys, autoscaling and service discovery. It's what large companies use, and it's a lot of new concepts (Pods, Deployments, Services, Ingress, Helm…).</p>
+  <ul>
+    <li><strong>Use it when:</strong> you have many services, several machines, a team, and someone whose job includes operating it, or you're on a managed offering (EKS, GKE, AKS) and need its ecosystem.</li>
+    <li><strong>Skip it when:</strong> it's one app, a small team, or one server. Compose, Kamal, or a managed platform (Way 7) gives you about 90% of the benefit for 10% of the complexity.</li>
+    <li><strong>To learn it cheaply:</strong> install <strong>k3s</strong> (a lightweight Kubernetes) on a spare VPS, or <strong>kind</strong>/<strong>minikube</strong> on your laptop. Your existing images work unchanged.</li>
+  </ul>
+</section>
+
+<section id="docker-data">
+  <h3 style="font-size:24px;margin-top:48px">Data, volumes &amp; networks</h3>
+
+  <h4>Volumes vs bind mounts</h4>
+  <table>
+    <tr><th></th><th>Named volume <code>pgdata:/var/lib/…</code></th><th>Bind mount <code>./backend:/app</code></th></tr>
+    <tr><td>Managed by</td><td>Docker (stored under <code>/var/lib/docker/volumes</code>)</td><td>You: it's a normal folder on the host</td></tr>
+    <tr><td>Use for</td><td>Database files, Redis, certificates, uploads</td><td>Source code in dev, config files</td></tr>
+    <tr><td>Permissions</td><td>Handled for you</td><td>Host and container users can clash (files owned by root, etc.)</td></tr>
+    <tr><td>Deleted by <code>down -v</code></td><td><strong>Yes</strong> ⚠️</td><td>No</td></tr>
+  </table>
+
+  <h4>Backing up Docker data</h4>
+  <div class="code"><div class="code-head"><span>~/backup.sh (Docker version)</span></div><pre><code><span class="c">#!/bin/bash</span>
+set -euo pipefail
+cd ~/app
+STAMP=$(date +%F_%H%M)
+mkdir -p ~/backups
+
+<span class="c"># Postgres: a logical dump (consistent while running; restores to any version)</span>
+docker compose exec -T db pg_dump -U myapp myapp | gzip &gt; ~/backups/db-$STAMP.sql.gz
+
+<span class="c"># any other volume (e.g. uploads): archive it via a throwaway container</span>
+<span class="c"># docker run --rm -v myapp_uploads:/data:ro -v ~/backups:/backup alpine \</span>
+<span class="c">#   tar czf /backup/uploads-$STAMP.tgz -C /data .</span>
+
+find ~/backups -mtime +14 -delete
+<span class="c"># rclone copy ~/backups r2:myapp-backups   ← off-site (step 8)</span></code></pre></div>
+  <p>Restore: <code>gunzip -c db-….sql.gz | docker compose exec -T db psql -U myapp myapp</code>. Volume names get the project name as a prefix (<code>myapp_pgdata</code>); list them with <code>docker volume ls</code>.</p>
+  <div class="callout danger">
+    <div class="callout-title">🚨 Don't copy a live database's files</div>
+    <p>Archiving <code>pgdata</code> with <code>tar</code> while Postgres is running can produce a corrupt backup. Use <code>pg_dump</code> (above), or stop the database first.</p>
+  </div>
+
+  <h4>Upgrading Postgres to a new major version</h4>
+  <p>Changing <code>postgres:17</code> to <code>postgres:18</code> on an existing volume <strong>won't start</strong>, because the data format differs between major versions. Do it like this: dump with the old version, stop it, start the new version with a <em>new</em> volume, then restore the dump. Minor updates (17.1 → 17.2) are just a pull and restart. (Postgres 18+ images also store data at a different path, <code>/var/lib/postgresql</code>, so check the image docs when you upgrade.)</p>
+
+  <h4>How containers talk to each other</h4>
+  <ul>
+    <li>Compose puts all services of a project on a shared network. Each service is reachable by its <strong>service name</strong> as a hostname: <code>db:5432</code>, <code>redis:6379</code>, <code>api:3000</code>.</li>
+    <li>Use the <strong>container port</strong> (the right side of <code>ports:</code>), not the published host port.</li>
+    <li><code>localhost</code> inside a container means <em>that container only</em>.</li>
+    <li>To reach a service on the <em>host</em> from a container (e.g. Postgres from the hybrid setup), use <code>host.docker.internal</code>. On Linux, add <code>extra_hosts: ["host.docker.internal:host-gateway"]</code> to the service.</li>
+    <li><code>internal: true</code> networks have no route to the internet, which is ideal for data services.</li>
+  </ul>
+</section>
+
+<section id="docker-security">
+  <h3 style="font-size:24px;margin-top:48px">Docker security checklist</h3>
+  <ul class="checklist">
+    <li><input type="checkbox"><span>Only 80/443 are published on all interfaces; everything else uses <code>127.0.0.1:</code> or isn't published at all (Docker bypasses ufw)</span></li>
+    <li><input type="checkbox"><span>Apps run as non-root (<code>USER node</code>/<code>USER app</code>)</span></li>
+    <li><input type="checkbox"><span>No secrets in images, Dockerfiles or git. Pass them at runtime with <code>env_file</code> or platform secrets</span></li>
+    <li><input type="checkbox"><span>Never mount <code>/var/run/docker.sock</code> into an internet-facing container: it gives full root on the host</span></li>
+    <li><input type="checkbox"><span>Remember that the <code>docker</code> group is effectively root. Only trusted users belong in it</span></li>
+    <li><input type="checkbox"><span>Base images pinned and rebuilt regularly (monthly) to pick up security patches</span></li>
+    <li><input type="checkbox"><span>Images scanned with <code>docker scout cves</code> or <code>trivy image</code>, ideally in CI</span></li>
+    <li><input type="checkbox"><span><code>read_only: true</code> + <code>tmpfs</code> where the app allows it; memory limits on every service</span></li>
+    <li><input type="checkbox"><span>Only images from official or trusted publishers. Check stars, maintainers and update dates on Docker Hub</span></li>
+  </ul>
+</section>
+
+<section id="docker-debug">
+  <h3 style="font-size:24px;margin-top:48px">Debugging containers</h3>
+  <table>
+    <tr><th>Question</th><th>Command</th></tr>
+    <tr><td>What's running, and is it healthy?</td><td><code>docker compose ps</code></td></tr>
+    <tr><td>Why did it crash?</td><td><code>docker compose logs --tail=200 api</code></td></tr>
+    <tr><td>Why is it unhealthy?</td><td><code>docker inspect --format '{{json .State.Health}}' myapp-api-1</code></td></tr>
+    <tr><td>Exit code meaning</td><td><code>137</code> = killed (often out of memory), <code>143</code> = stopped with SIGTERM, <code>1</code> = app error</td></tr>
+    <tr><td>Was it OOM-killed?</td><td><code>docker inspect --format '{{.State.OOMKilled}}' myapp-api-1</code></td></tr>
+    <tr><td>Live CPU / memory per container</td><td><code>docker stats</code></td></tr>
+    <tr><td>Look around inside</td><td><code>docker compose exec api sh</code> (if it's crash-looping: <code>docker compose run --rm --entrypoint sh api</code>)</td></tr>
+    <tr><td>Which env vars does it really have?</td><td><code>docker compose exec api env | sort</code></td></tr>
+    <tr><td>What config will Compose actually use?</td><td><code>docker compose config</code></td></tr>
+    <tr><td>Can the API reach the DB?</td><td><code>docker compose exec api sh -c 'nc -zv db 5432'</code></td></tr>
+    <tr><td>Why is the image so big?</td><td><code>docker history myapp-api</code> (or the <strong>dive</strong> tool)</td></tr>
+    <tr><td>Why is the build slow?</td><td><code>docker build --progress=plain …</code>: look for steps that aren't <code>CACHED</code></td></tr>
+    <tr><td>Disk usage</td><td><code>docker system df</code>, then <code>docker system prune</code> (add <code>-a</code> for unused images too)</td></tr>
+  </table>
+</section>
+
+<section id="docker-mistakes">
+  <h3 style="font-size:24px;margin-top:48px">Common Docker mistakes</h3>
+  <table>
+    <tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr>
+    <tr><td>App unreachable from other containers or the host</td><td>App listens on <code>127.0.0.1</code> inside the container</td><td>Listen on <code>0.0.0.0</code> (<code>HOST=0.0.0.0</code>)</td></tr>
+    <tr><td><code>ECONNREFUSED 127.0.0.1:5432</code> from the API container</td><td><code>localhost</code> means the container itself</td><td>Use the service name: <code>db:5432</code></td></tr>
+    <tr><td>Changed <code>.env</code> but the app still sees old values</td><td><code>docker compose restart</code> doesn't re-read config</td><td><code>docker compose up -d</code> (recreates changed services)</td></tr>
+    <tr><td>Changed <code>POSTGRES_PASSWORD</code>, now auth fails</td><td>Those variables only apply when the volume is first <em>initialised</em></td><td>Change it inside Postgres: <code>ALTER USER myapp PASSWORD '…';</code>, or recreate the volume (dev only!)</td></tr>
+    <tr><td>Database empty after a "cleanup"</td><td><code>docker compose down -v</code> or <code>docker volume prune</code></td><td>Restore from backup. Never use <code>-v</code> on production</td></tr>
+    <tr><td><code>exec format error</code></td><td>Image built for a different CPU (ARM Mac → x86 server, or the reverse)</td><td><code>--platform linux/amd64</code> or a multi-arch build</td></tr>
+    <tr><td>"Cannot find module" with bind mounts</td><td>The mount hid the container's <code>node_modules</code></td><td>Add the anonymous <code>/app/node_modules</code> volume (Way 2)</td></tr>
+    <tr><td>Hot reload doesn't trigger (Windows/macOS)</td><td>File change events don't cross the VM boundary reliably</td><td>Keep code in WSL on Windows; or Vite <code>server.watch.usePolling: true</code></td></tr>
+    <tr><td>Port reachable from the internet despite ufw</td><td>Docker writes its own firewall rules</td><td>Publish as <code>127.0.0.1:PORT:PORT</code>, or don't publish</td></tr>
+    <tr><td>Disk fills up over weeks</td><td>Old images, build cache, unlimited logs</td><td><code>daemon.json</code> log limits; <code>docker image prune</code> after deploys; <code>docker builder prune</code></td></tr>
+    <tr><td>Every build reinstalls all packages</td><td><code>COPY . .</code> before <code>npm ci</code></td><td>Copy <code>package*.json</code> first, install, then copy the rest</td></tr>
+    <tr><td>Container takes 10 s to stop</td><td>App not receiving SIGTERM (shell-form CMD / <code>npm start</code>)</td><td>JSON-form <code>CMD ["node", …]</code> + <code>init: true</code> + a SIGTERM handler</td></tr>
+    <tr><td>Deployed <code>:latest</code> but the server still runs the old code</td><td>Server didn't pull, or cached the tag</td><td>Deploy immutable SHA tags; always <code>docker compose pull</code> before <code>up</code></td></tr>
+    <tr><td>Let's Encrypt "too many certificates"</td><td>Caddy's <code>/data</code> isn't on a volume, so certs are lost on every recreate</td><td>Mount <code>caddy_data:/data</code></td></tr>
+  </table>
 </section>
 
 <!-- ================= PART 2: AWS ================= -->
@@ -2595,6 +3486,10 @@ sudo systemctl status cloudflared</code></pre></div>
     <tr><td>localhost / 127.0.0.1</td><td>"This machine". Services bound here can't be reached from outside.</td></tr>
     <tr><td>CDN</td><td>Content Delivery Network: copies your files to servers worldwide so they load fast everywhere.</td></tr>
     <tr><td>Container / Docker</td><td>Packages an app with everything it needs so it runs the same way anywhere.</td></tr>
+    <tr><td>Image</td><td>A read-only snapshot of an app plus its OS files and dependencies. Containers are started from images.</td></tr>
+    <tr><td>Registry</td><td>A server that stores images (Docker Hub, GitHub Container Registry, AWS ECR).</td></tr>
+    <tr><td>Volume</td><td>Storage managed by Docker that survives when containers are deleted. This is where databases keep their data.</td></tr>
+    <tr><td>Compose</td><td>A YAML file (<code>compose.yaml</code>) describing several containers and how they connect, started with one command.</td></tr>
     <tr><td>CORS</td><td>A browser rule that blocks a page from calling an API on a different domain unless the API allows it.</td></tr>
     <tr><td>SPA fallback</td><td>Serving <code>index.html</code> for unknown paths so client-side routes work when the page is refreshed.</td></tr>
     <tr><td>Migration</td><td>A versioned script that changes the database schema; run on every deploy.</td></tr>
